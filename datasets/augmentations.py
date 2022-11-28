@@ -28,10 +28,10 @@ class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, images, intrinsics):
+    def __call__(self, image, intrinsics):
         for t in self.transforms:
-            images, intrinsics = t(images, intrinsics)
-        return images, intrinsics
+            image, intrinsics = t(image, intrinsics)
+        return image, intrinsics
 
 
 class Normalize(object):
@@ -186,4 +186,4 @@ class ColorJitter(object):
         
         return jittered_img, new_intrinsics
 
-            
+         

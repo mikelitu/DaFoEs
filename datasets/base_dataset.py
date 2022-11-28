@@ -8,6 +8,9 @@ import numpy as np
 import random
 from path import Path
 
+def load_as_float(path):
+    return  imageio.v3.imread(path).astype(np.float32)
+
 
 class VisionStateDataset(Dataset):
     """A dataset to load data from dfferent folders that are arranged this way:
@@ -51,8 +54,15 @@ class VisionStateDataset(Dataset):
     
     def __getitem__(self, index: int):
         sample = self.samples[index]
-        img = 
+        img = load_as_float(sample['img'])
+        label = sample['label']
 
         if self.transform is not None:
-
-        return 
+            img, intrinsics = self.transform(img, np.copy(sample['intrinsics']))
+        else:
+            intrinsics = np.copy(sample['intrinsics'])
+        
+        return {'img': img, 'labels': np.copu(sample['label']), 'intrinsics': intrinsics, 'inv_intrinsics': np.linalg.inv(intrinsics)}
+    
+    def __len__(self):
+        return len(self.samples)
