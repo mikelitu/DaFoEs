@@ -36,4 +36,23 @@ class VisionStateDataset(Dataset):
         samples = []
 
         for scene in self.scenes:
+            labels = np.genfromtxt(scene/'labels.txt').astype(np.float32).reshape((-1, 18))
             images = sorted(scene.files("*.png"))
+
+            for i in range(len(images)):
+                sample = {}
+                sample['img'] = images[i]
+                sample['label'] = labels[i]
+                sample['intrinsics'] = np.copy(self.cam)
+                samples.append(sample)
+        
+        random.shuffle(samples)
+        self.samples = samples
+    
+    def __getitem__(self, index: int):
+        sample = self.samples[index]
+        img = 
+
+        if self.transform is not None:
+
+        return 
