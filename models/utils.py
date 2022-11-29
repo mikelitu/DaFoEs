@@ -1,4 +1,6 @@
 from torch import nn
+import sys
+
 
 import torch.nn.functional as F
 import torch
@@ -33,13 +35,15 @@ def kp2gaussian(kp, spatial_size, kp_variance):
 
     return out
 
-def make_coordinate_grid_2d(spatial_size, type):
+
+@torch.jit.script
+def make_coordinate_grid_2d(features: torch.Tensor) -> torch.Tensor: 
     """
     Create a meshgrid [-1,1] x [-1,1] of given spatial_size.
     """
-    h, w = spatial_size
-    x = torch.arange(w).type(type)
-    y = torch.arange(h).type(type)
+    _, _, h, w = features.shape
+    x = torch.arange(w).type_as(features)
+    y = torch.arange(h).type_as(features)
 
     x = (2 * (x / (w - 1)) - 1)
     y = (2 * (y / (h - 1)) - 1)
@@ -52,11 +56,12 @@ def make_coordinate_grid_2d(spatial_size, type):
     return meshed
 
 
-def make_coordinate_grid(spatial_size, type):
-    d, h, w = spatial_size
-    x = torch.arange(w).type(type)
-    y = torch.arange(h).type(type)
-    z = torch.arange(d).type(type)
+@torch.jit.script
+def make_coordinate_grid(features: torch.Tensor) -> torch.Tensor:
+    _, _, d, h, w = features.shape
+    x = torch.arange(w).type_as(features)
+    y = torch.arange(h).type_as(features)
+    z = torch.arange(d).type_as(features)
 
     x = (2 * (x / (w - 1)) - 1)
     y = (2 * (y / (h - 1)) - 1)
@@ -69,6 +74,19 @@ def make_coordinate_grid(spatial_size, type):
     meshed = torch.cat([xx.unsqueeze_(3), yy.unsqueeze_(3), zz.unsqueeze_(3)], 3)
 
     return meshed
+
+
+def world_2_camera(position, intrinsics):
+
+    h_position_i = intrinsics @ position
+    
+    h_position_i[:, 0] = h_position_i[:, 0] / h_position_i[:, 2]
+    h_position_i[:, 1] = h_position_i[:, 1] / h_position_i[:, 2]
+
+    position_i = h_position_i[:, :2]
+
+    return position_i
+    
 
 
 class ResBottleneck(nn.Module):
@@ -108,23 +126,35 @@ class ResBlock2d(nn.Module):
     Res block, preserve spatial resolution.
     """
 
-    def __init__(self, in_features, kernel_size, padding):
+    def __init__(self, in_features, kernel_size, padding, stride=False, out_channels=None):
         super(ResBlock2d, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=in_features, out_channels=in_features, kernel_size=kernel_size,
+        if out_channels is None:
+            out_channels = in_features
+        
+        if stride:    
+
+            self.conv1 = nn.Conv2d(in_channels=in_features, out_channels=out_channels, kernel_size=kernel_size,
+                                padding=padding, stride=2)
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_features, out_channels, kernel_size=1, stride=2),
+                BatchNorm2d(out_channels, affine=True)
+            )
+        else:
+            self.conv1 = nn.Conv2d(in_channels=in_features, out_channels=out_channels, kernel_size=kernel_size, padding=padding, stride=1)
+            self.shortcut = nn.Sequential()
+
+        self.conv2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size,
                                padding=padding)
-        self.conv2 = nn.Conv2d(in_channels=in_features, out_channels=in_features, kernel_size=kernel_size,
-                               padding=padding)
-        self.norm1 = BatchNorm2d(in_features, affine=True)
-        self.norm2 = BatchNorm2d(in_features, affine=True)
+        self.norm1 = BatchNorm2d(out_channels, affine=True)
+        self.norm2 = BatchNorm2d(out_channels, affine=True)
 
     def forward(self, x):
-        out = self.norm1(x)
+        shortcut = self.shortcut(x)
+
+        out = F.relu(self.norm1(self.conv1(x)))
+        out = F.relu(self.norm2(self.conv2(out)))
+        out += shortcut
         out = F.relu(out)
-        out = self.conv1(out)
-        out = self.norm2(out)
-        out = F.relu(out)
-        out = self.conv2(out)
-        out += x
         return out
 
 
@@ -499,4 +529,8 @@ def compute_residual(raw, compressed):
         The residual clipped between 0 and 1
     """
 
+if __name__ == "__main__":
 
+    features = torch.randn((1, 32, 64, 64, 64))
+    meshed = make_coordinate_grid_2d(features)
+    print(meshed.shape)
