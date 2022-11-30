@@ -7,6 +7,7 @@ import torch
 
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 from sync_batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
+from sync_batchnorm import SynchronizedBatchNorm1d as BatchNorm1d
 
 import torch.nn.utils.spectral_norm as spectral_norm
 import re
@@ -296,7 +297,7 @@ class FcBlock(nn.Module):
     def __init__(self, in_features, out_features):
         super(FcBlock, self).__init__()
         self.linear = nn.Linear(in_features, out_features)
-        self.bn = nn.BatchNorm1d(out_features)
+        self.bn = BatchNorm1d(out_features)
     
     def forward(self, x):
         out = self.linear(x)
@@ -360,6 +361,12 @@ class Decoder(nn.Module):
         out = self.norm(out)
         out = F.relu(out)
         return out
+
+
+class LSTMEncoder(nn.Module):
+    def __init__(self, ):
+        super(LSTMEncoder, self).__init__()
+        
 
 
 class Hourglass(nn.Module):

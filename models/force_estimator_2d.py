@@ -7,6 +7,10 @@ from models.utils import FcBlock
 
 class ResNet18(nn.Module):
 
+    """
+    Original architecture of the ResNet18 network.
+    """
+
     def __init__(self, in_channels):
         super(ResNet18, self).__init__()
 
@@ -49,6 +53,11 @@ class ResNet18(nn.Module):
 
 
 class ForceEstimatorVS(nn.Module):
+
+    """
+    Vision + State network architecture from the following paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
+    with Vision and Robot State" https://arxiv.org/pdf/2011.02112.pdf by Zonghe Chua et al.
+    """
     def __init__(self, rs_size):
         super(ForceEstimatorVS, self).__init__()
 
@@ -63,7 +72,7 @@ class ForceEstimatorVS(nn.Module):
     def forward(self, x, robot_state=None):
 
         out = self.encoder(x)
-        out_flatten = out.view(-1)
+        out_flatten = out.view(out.shape[0], -1)
         out_flatten = self.output(out_flatten)
         out = torch.cat([out_flatten, robot_state], dim=1)
         out = self.linear1(out)
@@ -74,6 +83,10 @@ class ForceEstimatorVS(nn.Module):
 
 
 class ForceEstimatorV(nn.Module):
+    """
+    Vision only network from the paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
+    with Vision and Robot State" https://arxiv.org/pdf/2011.02112.pdf by Zonghe Chua et al.
+    """
     def __init__(self):
         super(ForceEstimatorV, self).__init__()
 
@@ -84,13 +97,17 @@ class ForceEstimatorV(nn.Module):
 
     def forward(self, x):
         out = self.encoder(x)
-        out = out.view(-1)
+        out = out.view(out.shape[0], -1)
         out = self.linear(out)
         out = self.final(out)
         return out
 
 
 class ForceEstimatorS(nn.Module):
+    """
+    State only network from the paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
+    with Vision and Robot State" https://arxiv.org/pdf/2011.02112.pdf by Zonghe Chua et al.
+    """
     def __init__(self, rs_size):
         super(ForceEstimatorS, self).__init__()
 
@@ -109,4 +126,10 @@ class ForceEstimatorS(nn.Module):
         out = self.linear4(out)
         out = self.linear5(out)
         out = self.linear6(out)
+        out = self.final(out)
         return out
+
+
+
+
+
