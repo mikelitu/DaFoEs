@@ -289,6 +289,21 @@ class SameBlock2d(nn.Module):
         return out
 
 
+class FcBlock(nn.Module):
+    """
+    Dense layer block with batchnormalization and relu activation
+    """
+    def __init__(self, in_features, out_features):
+        super(FcBlock, self).__init__()
+        self.linear = nn.Linear(in_features, out_features)
+        self.bn = nn.BatchNorm1d(out_features)
+    
+    def forward(self, x):
+        out = self.linear(x)
+        out = self.bn(out)
+        out = F.relu(out)
+        return out
+
 class Encoder(nn.Module):
     """
     Hourglass Encoder
