@@ -11,35 +11,29 @@ class KPDetector(nn.Module):
     Detecting canonical keypoints. Return keypoint position and jacobian near each keypoint.
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, reshape_channel, reshape_depth,
-                 num_blocks, temperature, estimate_jacobian=False, scale_factor=1, single_jacobian_map=False):
+    def __init__(self, block_expansion, num_contacts, image_channel, max_features, reshape_channel, reshape_depth,
+                 num_blocks, temperature):
         super(KPDetector, self).__init__()
 
-        self.predictor = KPHourglass(block_expansion, in_features=image_channel,
-                                     max_features=max_features,  reshape_features=reshape_channel, reshape_depth=reshape_depth, num_blocks=num_blocks)
+        self.encoder = KPHourglass(block_expansion, in_features=image_channel,
+                                    max_features=max_features, reshape_features=reshape_channel, reshape_depth=reshape_depth, num_blocks=num_blocks)
 
         # self.kp = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_kp, kernel_size=7, padding=3)
-        self.kp = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_kp, kernel_size=3, padding=1)
+        self.contact = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_contacts, kernel_size=3, padding=1)
 
-        if estimate_jacobian:
-            self.num_jacobian_maps = 1 if single_jacobian_map else num_kp
-            # self.jacobian = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * self.num_jacobian_maps, kernel_size=7, padding=3)
-            self.jacobian = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * self.num_jacobian_maps, kernel_size=3, padding=1)
-            '''
-            initial as:
-            [[1 0 0]
-             [0 1 0]
-             [0 0 1]]
-            '''
-            self.jacobian.weight.data.zero_()
-            self.jacobian.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0, 0, 0, 1] * self.num_jacobian_maps, dtype=torch.float))
-        else:
-            self.jacobian = None
+        self.num_jacobian_maps = num_contacts
+        # self.jacobian = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * self.num_jacobian_maps, kernel_size=7, padding=3)
+        self.force_3d = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * self.num_jacobian_maps, kernel_size=3, padding=1)
+        '''
+        initial as:
+         [[1 0 0]
+         [0 1 0]
+         [0 0 1]]
+        '''
+        self.force_3d.weight.data.zero_()
+        self.force_3d.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0, 0, 0, 1] * self.num_jacobian_maps, dtype=torch.float))
 
         self.temperature = temperature
-        self.scale_factor = scale_factor
-        if self.scale_factor != 1:
-            self.down = AntiAliasInterpolation2d(image_channel, self.scale_factor)
 
     def gaussian2kp(self, heatmap):
         """
@@ -47,18 +41,17 @@ class KPDetector(nn.Module):
         """
         shape = heatmap.shape
         heatmap = heatmap.unsqueeze(-1)
+        print(heatmap.shape)
         grid = make_coordinate_grid(shape[2:], heatmap.type()).unsqueeze_(0).unsqueeze_(0)
         value = (heatmap * grid).sum(dim=(2, 3, 4)) #The values will be in the range of the grid size
-        kp = {'value': value} #(bs, kp, 3)
+        contact = {'contact': value} #(bs, kp, 3)
 
-        return kp
+        return contact
 
     def forward(self, x):
-        if self.scale_factor != 1:
-            x = self.down(x)
 
-        feature_map = self.predictor(x)
-        prediction = self.kp(feature_map)
+        feature_map = self.encoder(x)
+        prediction = self.contact(feature_map)
 
         final_shape = prediction.shape
         heatmap = prediction.view(final_shape[0], final_shape[1], -1)
@@ -67,17 +60,16 @@ class KPDetector(nn.Module):
 
         out = self.gaussian2kp(heatmap) #Get the mean of the heatmap to estimate the position of the point
 
-        if self.jacobian is not None:
-            jacobian_map = self.jacobian(feature_map)
-            jacobian_map = jacobian_map.reshape(final_shape[0], self.num_jacobian_maps, 9, final_shape[2],
-                                                final_shape[3], final_shape[4])
-            heatmap = heatmap.unsqueeze(2)
+        force_map = self.force_3d(feature_map)
+        force_map = force_map.reshape(final_shape[0], self.num_jacobian_maps, 9, final_shape[2],
+                                            final_shape[3], final_shape[4])
+        heatmap = heatmap.unsqueeze(2)
 
-            jacobian = heatmap * jacobian_map
-            jacobian = jacobian.view(final_shape[0], final_shape[1], 9, -1)
-            jacobian = jacobian.sum(dim=-1)
-            jacobian = jacobian.view(jacobian.shape[0], jacobian.shape[1], 3, 3)
-            out['jacobian'] = jacobian
+        force = heatmap * force_map
+        force = force.view(final_shape[0], final_shape[1], 9, -1)
+        force = force.sum(dim=-1)
+        force = force.view(force.shape[0], force.shape[1], 3, 3)
+        out['force'] = force
 
         return out
 
@@ -87,7 +79,7 @@ class REEstimator(nn.Module):
     Estimating head pose and expression.
     """
 
-    def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True):
+    def __init__(self, block_expansion, image_channel, num_bins=66):
         super(REEstimator, self).__init__()
 
         self.conv1 = nn.Conv2d(in_channels=image_channel, out_channels=block_expansion, kernel_size=7, padding=3, stride=2)
@@ -133,8 +125,6 @@ class REEstimator(nn.Module):
 
         self.fc_t = nn.Linear(2048, 3)
 
-        self.fc_exp = nn.Linear(2048, 3*num_kp)
-
     def forward(self, x, state=None):
         out = self.conv1(x)
         out = self.norm1(out)
@@ -179,6 +169,5 @@ class REEstimator(nn.Module):
         pitch = self.fc_pitch(out)
         roll = self.fc_yaw(out)
         t = self.fc_t(out)
-        exp = self.fc_exp(out)
 
-        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
+        return {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t}

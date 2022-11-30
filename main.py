@@ -2,12 +2,12 @@ import models.utils as utils
 import torch
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
-from models.force_estimator import ResNet18
+from models.force_estimator_2d import ForceEstimatorV
 
 
 def main():
     
-    model = ResNet18(in_channels=3)
+    model = ForceEstimatorV(in_channels=3)
     print(model)
 
     image = torch.randn((1, 3, 256, 256))
