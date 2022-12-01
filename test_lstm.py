@@ -25,7 +25,7 @@ class LSTM(nn.Module):
             output = self.linear(h_t2)
             outputs.append(output)
         
-        for i in range(future_preds):
+        for _ in range(future_preds):
             h_t, c_t = self.lstm1(output, (h_t, c_t))
             h_t2, c_t2 = self.lstm2(h_t, (h_t2, c_t2))
             output = self.linear(h_t2)
@@ -65,7 +65,7 @@ def training_loop(n_epochs: int, model: LSTM, optimizer: torch.optim.LBFGS, loss
         draw(y[0], 'r')
         draw(y[1], 'b')
         draw(y[2], 'g')
-        plt.savefig("predict%d.png"%i, dpi=200)
+        plt.savefig("\pred\predict%d.png"%i, dpi=200)
         plt.close()
         out = model(train_input)
         loss_print = loss_fn(out, train_target)
@@ -76,11 +76,12 @@ def main():
     L = 1000 # length of each sampe (number of values each sine wave)
     T = 20 # width of the wave
     x = np.empty((N, L), np.float32) # instantiate empty array
-    x[:] = np.arange((L)) + np.random.randint(-4*T, 4*T, N).reshape(N, 1)
+    x[:] = np.arange(L) + np.random.randint(-4*T, 4*T, N).reshape(N, 1)
     y = np.sin(x/1.0/T).astype(np.float32)
-    train_input = torch.from_numpy(y[3:, :-1])
+
+    train_input = torch.from_numpy(x[3:, :-1])
     train_target = torch.from_numpy(y[3:, 1:])
-    test_input = torch.from_numpy(y[:3, :-1])
+    test_input = torch.from_numpy(x[:3, :-1])
     test_target = torch.from_numpy(y[:3, 1:])
     model = LSTM()
     criterion = nn.MSELoss()
