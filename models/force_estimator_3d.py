@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-from models.utils import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck
+from models.utils import KPHourglass, make_coordinate_grid, ResBottleneck
 
 
 class KPDetector(nn.Module):
@@ -11,19 +11,19 @@ class KPDetector(nn.Module):
     Detecting canonical keypoints. Return keypoint position and jacobian near each keypoint.
     """
 
-    def __init__(self, block_expansion, num_contacts, image_channel, max_features, reshape_channel, reshape_depth,
-                 num_blocks, temperature):
+    def __init__(self, block_expansion: int, num_contacts: int, image_channel: int, max_features: int, reshape_channel: int, reshape_depth: int,
+                 num_blocks: int, temperature: float):
         super(KPDetector, self).__init__()
 
         self.encoder = KPHourglass(block_expansion, in_features=image_channel,
                                     max_features=max_features, reshape_features=reshape_channel, reshape_depth=reshape_depth, num_blocks=num_blocks)
 
         # self.kp = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_kp, kernel_size=7, padding=3)
-        self.contact = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_contacts, kernel_size=3, padding=1)
+        self.contact = nn.Conv3d(in_channels=self.encoder.out_filters, out_channels=num_contacts, kernel_size=3, padding=1)
 
         self.num_jacobian_maps = num_contacts
         # self.jacobian = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * self.num_jacobian_maps, kernel_size=7, padding=3)
-        self.force_3d = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * self.num_jacobian_maps, kernel_size=3, padding=1)
+        self.force_3d = nn.Conv3d(in_channels=self.encoder.out_filters, out_channels=6 * self.num_jacobian_maps, kernel_size=3, padding=1)
         '''
         initial as:
          [[1 0 0]
@@ -35,20 +35,18 @@ class KPDetector(nn.Module):
 
         self.temperature = temperature
 
-    def gaussian2kp(self, heatmap):
+    def gaussian2kp(self, heatmap: torch.Tensor) -> dict:
         """
         Extract the mean from a heatmap
         """
-        shape = heatmap.shape
+        grid = make_coordinate_grid(heatmap).unsqueeze_(0).unsqueeze_(0)
         heatmap = heatmap.unsqueeze(-1)
-        print(heatmap.shape)
-        grid = make_coordinate_grid(shape[2:], heatmap.type()).unsqueeze_(0).unsqueeze_(0)
         value = (heatmap * grid).sum(dim=(2, 3, 4)) #The values will be in the range of the grid size
         contact = {'contact': value} #(bs, kp, 3)
 
         return contact
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> dict:
 
         feature_map = self.encoder(x)
         prediction = self.contact(feature_map)
@@ -61,14 +59,14 @@ class KPDetector(nn.Module):
         out = self.gaussian2kp(heatmap) #Get the mean of the heatmap to estimate the position of the point
 
         force_map = self.force_3d(feature_map)
-        force_map = force_map.reshape(final_shape[0], self.num_jacobian_maps, 9, final_shape[2],
+        force_map = force_map.reshape(final_shape[0], self.num_jacobian_maps, 6, final_shape[2],
                                             final_shape[3], final_shape[4])
         heatmap = heatmap.unsqueeze(2)
 
         force = heatmap * force_map
-        force = force.view(final_shape[0], final_shape[1], 9, -1)
+        force = force.view(final_shape[0], final_shape[1], 6, -1)
         force = force.sum(dim=-1)
-        force = force.view(force.shape[0], force.shape[1], 3, 3)
+        force = force.view(force.shape[0], force.shape[1], 2, 3)
         out['force'] = force
 
         return out

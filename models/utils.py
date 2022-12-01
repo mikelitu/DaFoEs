@@ -37,7 +37,6 @@ def kp2gaussian(kp, spatial_size, kp_variance):
     return out
 
 
-@torch.jit.script
 def make_coordinate_grid_2d(features: torch.Tensor) -> torch.Tensor: 
     """
     Create a meshgrid [-1,1] x [-1,1] of given spatial_size.
@@ -57,7 +56,6 @@ def make_coordinate_grid_2d(features: torch.Tensor) -> torch.Tensor:
     return meshed
 
 
-@torch.jit.script
 def make_coordinate_grid(features: torch.Tensor) -> torch.Tensor:
     _, _, d, h, w = features.shape
     x = torch.arange(w).type_as(features)
@@ -127,7 +125,7 @@ class ResBlock2d(nn.Module):
     Res block, preserve spatial resolution.
     """
 
-    def __init__(self, in_features, kernel_size, padding, stride=False, out_channels=None):
+    def __init__(self, in_features: int, kernel_size: int, padding: int, stride: bool = False, out_channels: int = None):
         super(ResBlock2d, self).__init__()
         if out_channels is None:
             out_channels = in_features
@@ -149,7 +147,7 @@ class ResBlock2d(nn.Module):
         self.norm1 = BatchNorm2d(out_channels, affine=True)
         self.norm2 = BatchNorm2d(out_channels, affine=True)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         shortcut = self.shortcut(x)
 
         out = F.relu(self.norm1(self.conv1(x)))
@@ -208,14 +206,14 @@ class UpBlock3d(nn.Module):
     Upsampling block for use in decoder.
     """
 
-    def __init__(self, in_features, out_features, kernel_size=3, padding=1, groups=1):
+    def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1, groups: int = 1):
         super(UpBlock3d, self).__init__()
 
         self.conv = nn.Conv3d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
                               padding=padding, groups=groups)
         self.norm = BatchNorm3d(out_features, affine=True)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         # out = F.interpolate(x, scale_factor=(1, 2, 2), mode='trilinear')
         out = F.interpolate(x, scale_factor=(1, 2, 2))
         out = self.conv(out)
@@ -229,14 +227,14 @@ class DownBlock2d(nn.Module):
     Downsampling block for use in encoder.
     """
 
-    def __init__(self, in_features, out_features, kernel_size=3, padding=1, groups=1):
+    def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1, groups: int = 1):
         super(DownBlock2d, self).__init__()
         self.conv = nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=kernel_size,
                               padding=padding, groups=groups)
         self.norm = BatchNorm2d(out_features, affine=True)
         self.pool = nn.AvgPool2d(kernel_size=(2, 2))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv(x)
         out = self.norm(out)
         out = F.relu(out)
@@ -389,7 +387,7 @@ class KPHourglass(nn.Module):
     Hourglass architecture.
     """ 
 
-    def __init__(self, block_expansion, in_features, reshape_features, reshape_depth, num_blocks=3, max_features=256):
+    def __init__(self, block_expansion: int, in_features: int, reshape_features: int, reshape_depth: int, num_blocks: int = 3, max_features: int = 256):
         super(KPHourglass, self).__init__()
         
         self.down_blocks = nn.Sequential()
@@ -410,7 +408,7 @@ class KPHourglass(nn.Module):
         self.reshape_depth = reshape_depth
         self.out_filters = out_filters
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.down_blocks(x)
         out = self.conv(out)
         bs, c, h, w = out.shape
@@ -534,25 +532,3 @@ class SPADEResnetBlock(nn.Module):
     def actvn(self, x):
         return F.leaky_relu(x, 2e-1)
 
-
-def compute_residual(raw, compressed):
-    """
-    This function computes the residual map between two images:
-    Parameters
-    ----------
-    raw : Tensor
-        The raw image
-    compressed : Tensor
-        The generated image
-
-    Returns
-    -------
-    residual : Tensor
-        The residual clipped between 0 and 1
-    """
-
-if __name__ == "__main__":
-
-    features = torch.randn((1, 32, 64, 64, 64))
-    meshed = make_coordinate_grid_2d(features)
-    print(meshed.shape)

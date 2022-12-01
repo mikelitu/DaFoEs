@@ -4,4 +4,4 @@ matplotlib
 torchvision
 imageio
 cv2
-PIL
+pillow
