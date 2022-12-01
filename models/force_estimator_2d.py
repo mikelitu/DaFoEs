@@ -155,9 +155,3 @@ class RecurrentCNN(nn.Module):
         x = x[:, -1, :]
         x = self.fc(x)
         return x
-
-
-if __name__ == "__main__":
-    model = ResNet18(in_channels=3, final_features=1000)
-    for parameter in model.parameters():
-        print(parameter)
