@@ -61,10 +61,10 @@ class ForceEstimatorVS(nn.Module):
     Vision + State network architecture from the following paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
     with Vision and Robot State" by Zonghe Chua et al. (https://doi.org/10.48550/arXiv.2011.02112)
     """
-    def __init__(self, rs_size: int):
+    def __init__(self, rs_size: int, final_layer: int):
         super(ForceEstimatorVS, self).__init__()
 
-        self.encoder = ResNet18(in_channels=3)
+        self.encoder = ResNet18(in_channels=3, final_features=final_layer)
 
         self.linear1 = FcBlock(30 + rs_size, 84)
         self.linear2 = FcBlock(84, 180)
@@ -87,10 +87,10 @@ class ForceEstimatorV(nn.Module):
     Vision only network from the paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
     with Vision and Robot State" by Zonghe Chua et al. (doi: https://doi.org/10.48550/arXiv.2011.02112)
     """
-    def __init__(self):
+    def __init__(self, final_layer: int):
         super(ForceEstimatorV, self).__init__()
 
-        self.encoder = ResNet18(in_channels=3)
+        self.encoder = ResNet18(in_channels=3, final_features=final_layer)
         self.final = nn.Linear(30, 3)
 
     def forward(self, x):
@@ -155,3 +155,9 @@ class RecurrentCNN(nn.Module):
         x = x[:, -1, :]
         x = self.fc(x)
         return x
+
+
+if __name__ == "__main__":
+    model = ResNet18(in_channels=3, final_features=1000)
+    for parameter in model.parameters():
+        print(parameter)

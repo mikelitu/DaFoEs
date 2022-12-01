@@ -2,7 +2,7 @@ import models.utils as utils
 import torch
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
-from models.force_estimator_2d import ForceEstimatorV, ForceEstimatorVS, ForceEstimatorS
+from models.force_estimator_2d import ForceEstimatorV, ForceEstimatorVS, ForceEstimatorS, ResNet18
 import torch.nn as nn
 
 
@@ -26,6 +26,4 @@ def main():
     lstm =nn.LSTM(input_size=512, hidden_size=500, num_layers=2, batch_first=True, dropout=0.1)
     print(lstm)
 
-if __name__ == "__main__":
-    main()
 
