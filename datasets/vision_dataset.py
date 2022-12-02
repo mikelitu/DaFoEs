@@ -30,7 +30,6 @@ class VisionDataset(Dataset):
         scene_list_path = self.root/"train.txt" if is_train else self.root/'val.txt'
         self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)]
         self.transform = transform
-        self.cam = np.fromfile(self.root/"cam.txt").astype(np.float32).reshape(3,3)
         self.crawl_folders()
         
         
@@ -44,7 +43,6 @@ class VisionDataset(Dataset):
             for i in range(len(images)):
                 sample = {}
                 sample['img'] = images[i]
-                sample['intrinsics'] = np.copy(self.cam)
                 samples.append(sample)
         
         random.shuffle(samples)
@@ -55,9 +53,7 @@ class VisionDataset(Dataset):
         img = load_as_float(sample['img'])
 
         if self.transform is not None:
-            img, intrinsics = self.transform(img, np.copy(sample['intrinsics']))
-        else:
-            intrinsics = np.copy(sample['intrinsics'])
+            img, _ = self.transform(img, None)
         
         return img
     
