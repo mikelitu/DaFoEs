@@ -23,7 +23,7 @@ class VisionStateDataset(Dataset):
         transform functions takes in a list images and a numpy array representing the intrinsics of the camera and the robot state
     """
 
-    def __init__(self, root, is_train=True, transform=None, seed=0):
+    def __init__(self, root, is_train=True, transform=None, seed=0, occlude_params=[]):
         np.random.seed(seed)
         random.seed(seed)
         self.root = Path(root)
@@ -39,7 +39,7 @@ class VisionStateDataset(Dataset):
         samples = []
 
         for scene in self.scenes:
-            labels = np.genfromtxt(scene/'labels.txt').astype(np.float32).reshape((-1, 18))
+            labels = np.genfromtxt(scene/'labels.txt').astype(np.float32).reshape((-1, "number to be decided"))
             images = sorted(scene.files("*.png"))
 
             for i in range(len(images)):
