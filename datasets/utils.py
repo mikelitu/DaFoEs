@@ -1,7 +1,7 @@
 import torch
 from typing import List
 
-def check_key(key: str):
+def check_key(key: str) -> List[int]:
     indices_dict = {'robot_pos': ["values to be decided"], 'joint_pos': ["values to be decided"], 'geo_com': ["values to be decided"]}
     return indices_dict[key]
 
