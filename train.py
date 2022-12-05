@@ -18,6 +18,7 @@ from datasets.vision_state_dataset import VisionStateDataset
 from datasets.state_dataset import StateDataset
 from tensorboardX import SummaryWriter
 from path import Path
+from logger import TermLogger, AverageMeter
 
 parser = argparse.ArgumentParser(description='Vision and roboto state based force estimator using CNNs',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -126,25 +127,62 @@ def main():
         writer = csv.writer(csvfile, delimiter='\t')
         writer.writerow(['train_loss', 'validation_loss'])
     
+    with open(args.save_path/args.log_full, "w") as csvfile:
+        writer = csv.writer(csvfile, delimiter='\t')
+        writer.writerow(['train_loss', 'mse_loss'])
     
+    logger = TermLogger(n_epochs=args.epochs, train_size=len(train_loader), valid_size=len(val_loader))
+    logger.epoch_bar.start()
 
+    for epoch in range(args.epochs):
+        logger.epoch_bar.update(epoch)
 
-    
+        #train for one epoch
+        logger.reset_train_bar()
+        train_loss = train(args, train_loader, model, optimizer, logger, training_writer)
+        logger.train_writer.write(' * Avg Loss: {:.3f}'.format(train_loss))
+        
+        #evaluate the model in validation set
+        logger.reset_valid_bar()
+        errors, error_names = validate(args, val_loader, model, epoch, logger, output_writers)
+        error_string = ', '.join('{} : {:.3f}'.format(name, error) for name, error in zip(error_names, errors))
+        logger.valid_writer.write(' * Avg {}'.format(error_string))
 
-    ##Initialize the optimizers
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999))
+        for error, name in zip(errors, error_names):
+            training_writer.add_scalar(name, error, epoch)
+        
+        #Choose here which is the error you want to consider
+        decisive_error = errors[0]
+        if best_error < 0:
+            best_error = decisive_error
 
-    if ckp is not None:
-        load_checkpoint(ckp, model, optimizer)
-    
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
+        #remember lowest error and save checkpoint
+        is_best = decisive_error < best_error
+        best_error = min(best_error, decisive_error)
+        save_checkpoint(
+            args.save_path, {
+                'epoch': epoch + 1,
+                'state_dict': model.state_dict()
+            },
+            is_best)
+        
+        with open(args.save_path/args.log_summary, 'a') as csvfile:
+            writer = csv.writer(csvfile, delimiter='\t')
+            writer.writerow([train_loss, decisive_error])
+    logger.epoch_bar.finish()
 
-    #Start the losses
-    rmse = RMSE()
-    euc_dist = EuclideanDist()
+def train(args, train_loader, model, optimizer, logger, train_writer):
+    global n_iter, device
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    losses = AverageMeter()
 
-    
-    for epoch in tqdm(range(n_epochs)):
-        for (i, data) in tqdm(enumerate(dataloader)):
-            #Isolate the data into the different parts and save them properly
-            continue
+    #switch the models to train mode
+    model.train()
+
+    end = time.time()
+    logger.train_bar.update(0)
+
+    for i, out in enumerate(train_loader):
+        log_losses = i > 0 and n_iter % args.print_freq == 0   
+

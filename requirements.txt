@@ -7,3 +7,5 @@ opencv-python
 pillow
 path
 tensorboardX
+blessings
+progressbar
