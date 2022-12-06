@@ -171,7 +171,7 @@ def main():
             writer.writerow([train_loss, decisive_error])
     logger.epoch_bar.finish()
 
-def train(args, train_loader, model, optimizer, logger, train_writer):
+def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter):
     global n_iter, device
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -183,6 +183,22 @@ def train(args, train_loader, model, optimizer, logger, train_writer):
     end = time.time()
     logger.train_bar.update(0)
 
-    for i, out in enumerate(train_loader):
+    for i, data in enumerate(train_loader):
         log_losses = i > 0 and n_iter % args.print_freq == 0   
 
+
+@torch.no_grad()
+def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, output_writers: SummaryWriter = []):
+    global device
+    batch_time = AverageMeter()
+    losses = AverageMeter(i=4, precision=4)
+    log_outputs = len(output_writers) > 0
+
+    #switch to evaluate mode
+    model.eval()
+
+    end = time.time()
+    logger.valid_bar.update(0)
+
+if __name__ == "__main__":
+    main()
