@@ -10,3 +10,4 @@ tensorboardX
 blessings
 progressbar
 scipy
+vit-pytorch
