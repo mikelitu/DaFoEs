@@ -3,7 +3,6 @@ numpy
 matplotlib
 torchvision
 imageio
-opencv-python
 pillow
 path
 tensorboardX
