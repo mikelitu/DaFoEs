@@ -4,18 +4,14 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from losses import RMSE, EuclideanDist
+from losses import RMSE, EuclideanDist, GDL
 import argparse
-from models.force_estimator_2d import ForceEstimatorS, ForceEstimatorV, ForceEstimatorVS, RecurrentCNN
-from models.force_estimator_3d import KPDetector
 import datetime
 import time
 import csv
 import numpy as np
 from datasets import augmentations
 from utils import save_checkpoint, assert_dataset_type, assert_model_type
-from datasets.vision_state_dataset import VisionStateDataset
-from datasets.state_dataset import StateDataset
 from tensorboardX import SummaryWriter
 from path import Path
 from logger import TermLogger, AverageMeter
@@ -24,7 +20,7 @@ parser = argparse.ArgumentParser(description='Vision and roboto state based forc
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument('data', metavar='DIR', help='path to dataset')
-parser.add_argument('--model-type', type=str, choices=['2d_v', '2d_vs', '2d_s', '2d_rnn', '3d_cnn'], default='3d_conv', help='the chosen model type')
+parser.add_argument('--model-type', type=str, choices=['2d_v', '2d_vs', '2d_s', '2d_rnn', 'cnn_tr'], default='cnn_tr', help='the chosen model type')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('-b', '--batch-size', default=32, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, metavar='LR', help='initial learning rate')

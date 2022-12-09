@@ -9,7 +9,7 @@ from datasets.state_dataset import StateDataset
 from datasets.vision_dataset import VisionDataset
 from typing import Tuple
 from models.force_estimator_2d import ForceEstimatorV, ForceEstimatorS, ForceEstimatorVS, RecurrentCNN
-from models.force_estimator_3d import KPDetector
+from models.force_estimator_transformers import KPDetector
 
 Datasets = Tuple[Dataset]
 
@@ -96,8 +96,7 @@ def assert_model_type(args):
     relations_model = {'2d_v': force_vision(),
                         '2d_s': force_state(),
                         '2d_vs': force_state_vision(),
-                        '2d_rnn': force_rnn(),
-                        '3d_cnn': force_3d()}
+                        '2d_rnn': force_rnn()}
     
     model, model_name = relations_model[args.type]
 
@@ -125,11 +124,4 @@ def force_rnn():
 
     model = RecurrentCNN(embed_dim=512, hidden_size=500, num_layers=2, num_classes=3)
     model_name = "Recurrent Force Estimator"
-    return model, model_name
-
-def force_3d():
-
-    model = KPDetector(block_expansion=32, num_contacts=1, image_channel=3, max_features=1024, reshape_channel=16384,
-                                            reshape_depth=16, num_blocks=5, temperature=0.1)
-    model_name = "3D CNN Force Estimator"
     return model, model_name
