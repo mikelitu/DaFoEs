@@ -1,12 +1,12 @@
-torch
 numpy
 matplotlib
 torchvision
 imageio
-pillow
+pillow < 7
 path
-tensorboardX
+tensorboard
 blessings
-progressbar
+progressbar2
 scipy
 vit-pytorch
+tensorbardx
