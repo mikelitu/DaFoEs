@@ -14,7 +14,7 @@ class Compose(object):
     def __init__(self, transforms: object):
         self.transforms = transforms
 
-    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray) -> Tuple[torch.Tensor]:
+    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray = None) -> Tuple[torch.Tensor]:
         for t in self.transforms:
             images, intrinsics = t(images, intrinsics)
         return images, intrinsics
@@ -34,7 +34,7 @@ class Normalize(object):
 class ArrayToTensor(object):
     """Converts a list of numpy.ndarray (H x W x C) along with a intrinsics matrix to a list of torch.FloatTensor of shape (C x H x W) with a intrinsics tensor."""
 
-    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray) -> Tuple[torch.Tensor]:
+    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray = None) -> Tuple[torch.Tensor]:
         # put it from HWC to CHW format
         images = [np.transpose(im, (2, 0, 1)) for im in images]
         # handle numpy array
@@ -45,7 +45,7 @@ class ArrayToTensor(object):
 class RandomHorizontalFlip(object):
     """Randomly horizontally flips the given numpy array with a probability of 0.5"""
 
-    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray) -> Tuple[np.ndarray]:
+    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray = None) -> Tuple[np.ndarray]:
         output_intrinsics = None
         if random.random() < 0.5:
             if intrinsics is not None:
@@ -91,16 +91,19 @@ class RandomScaleCrop(object):
 
 class SquareResize(object):
     """Resize the image to a square of 256x256"""
-    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray):
+    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray = None):
         if intrinsics is not None:
             output_intrinsics = np.copy(intrinsics)
+        else:
+            output_intrinsics = None
 
         new_size = (256, 256)
 
-        in_h, in_w, _ = images[0].shape
-        scaling_h, scaling_w = (new_size[1] / in_h), (new_size[0] / in_w)
-        output_intrinsics[0] *= scaling_w
-        output_intrinsics[1] *= scaling_h
+        if intrinsics is not None:
+            in_h, in_w, _ = images[0].shape
+            scaling_h, scaling_w = (new_size[1] / in_h), (new_size[0] / in_w)
+            output_intrinsics[0] *= scaling_w
+            output_intrinsics[1] *= scaling_h
 
         scaled_images = [np.array(Image.fromarray(im.astype(np.uint8)).resize(new_size)).astype(np.float32) for im in images]
 

@@ -7,9 +7,13 @@ import imageio
 import numpy as np
 import random
 from path import Path
+import pandas as pd
 
-def load_as_float(path):
-    return  imageio.v3.imread(path).astype(np.float32)
+
+
+def load_as_float(path) -> np.ndarray:
+    return  imageio.imread(path).astype(np.float32)
+
 
 
 class VisionStateDataset(Dataset):
@@ -30,7 +34,6 @@ class VisionStateDataset(Dataset):
         scene_list_path = self.root/"train.txt" if is_train else self.root/'val.txt'
         self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)]
         self.transform = transform
-        self.cam = np.fromfile(self.root/"cam.txt").astype(np.float32).reshape(3,3)
         self.crawl_folders()
         
         
@@ -39,30 +42,27 @@ class VisionStateDataset(Dataset):
         samples = []
 
         for scene in self.scenes:
-            labels = np.genfromtxt(scene/'labels.txt').astype(np.float32).reshape((-1, "number to be decided"))
+            labels = np.array(pd.read_csv(scene/'labels.csv'))
             images = sorted(scene.files("*.png"))
 
             for i in range(len(images)):
                 sample = {}
                 sample['img'] = images[i]
                 sample['label'] = labels[i]
-                sample['intrinsics'] = np.copy(self.cam)
                 samples.append(sample)
         
         random.shuffle(samples)
         self.samples = samples
     
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> dict:
         sample = self.samples[index]
         img = load_as_float(sample['img'])
         label = sample['label']
 
         if self.transform is not None:
-            img, intrinsics = self.transform(img, np.copy(sample['intrinsics']))
-        else:
-            intrinsics = np.copy(sample['intrinsics'])
+            img, _ = self.transform(img, None)
         
-        return {'img': img, 'labels': np.copu(sample['label']), 'intrinsics': intrinsics, 'inv_intrinsics': np.linalg.inv(intrinsics)}
+        return {'img': img, 'robot_state': label[:-6], 'force': 0.1 * label[-6:-3], 'torque': label[-3:]}
     
     def __len__(self):
         return len(self.samples)
