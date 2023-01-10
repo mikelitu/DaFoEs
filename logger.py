@@ -39,6 +39,7 @@ class TermLogger(object):
             max_value=self.valid_size, fd=self.valid_bar_writer)
 
 
+
 class Writer(object):
     """Create an object with a write method that writes to a
     specific place on the screen, defined at instantiation.
@@ -91,3 +92,11 @@ class AverageMeter(object):
         val = ' '.join(['{:.{}f}'.format(v, self.precision) for v in self.val])
         avg = ' '.join(['{:.{}f}'.format(a, self.precision) for a in self.avg])
         return '{} ({})'.format(val, avg)
+
+
+class PatchSamplerLog(object):
+    """Saves the patched image and the sampled token in every layer"""
+
+    def __init__(self, save_dir, alpha=0.2):
+        self.save_dir = save_dir
+        self.alpha = alpha

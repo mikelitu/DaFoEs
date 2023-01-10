@@ -11,16 +11,20 @@ import time
 import csv
 import numpy as np
 from datasets import augmentations
-from utils import save_checkpoint, assert_dataset_type, assert_model_type
+from utils import save_checkpoint
 from tensorboardX import SummaryWriter
 from path import Path
 from logger import TermLogger, AverageMeter
+from models.force_estimator_transformers import ViT
+from models.recorder import Recorder
+from datasets.vision_state_dataset import VisionStateDataset
 
-parser = argparse.ArgumentParser(description='Vision and roboto state based force estimator using CNNs',
+parser = argparse.ArgumentParser(description='Vision and roboto state based force estimator using Token Sampling Transformers',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument('data', metavar='DIR', help='path to dataset')
-parser.add_argument('--model-type', type=str, choices=['2d_v', '2d_vs', '2d_s', '2d_rnn', 'cnn_tr'], default='cnn_tr', help='the chosen model type')
+parser.add_argument('--patch-size', default=32, type=int, metavar='N', help='size of the patches fed into the transformer')
+parser.add_argument('--token-sampling', default=(256, 128, 64, 32, 16, 8), type=tuple, help='sampled token size')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('-b', '--batch-size', default=32, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, metavar='LR', help='initial learning rate')
@@ -32,10 +36,8 @@ parser.add_argument('--seed', default=0, type=int, help='seed for random functio
 parser.add_argument('--log-summary', default='log_summary.csv', metavar='PATH', help='csv to save the per-epoch train and valid stats')
 parser.add_argument('--log-full', default='log_full.csv', metavar='PATH', help='csv to save the progress per gradient during training')
 parser.add_argument('--log-output', action='store_true', help='will log force estimation ouputs at validation')
-parser.add_argument('--resnet-layers', type=int, default=18, choices=[18, ], help='number of ResNet layers')
 parser.add_argument('--pretrained', default=None, metavar='PATH', help='path to pretrained model')
 parser.add_argument('--name', dest='name', type=str, required=True, help='name of the experiment, checkpoint are stored in checkpoint/name')
-parser.add_argument('--occ', default=None, choices=['robot_pos', 'joint_pos', 'geo_com'], nargs='+')
 parser.add_argument('--verbose', dest='verbose', type=bool, action="store_true", help="print model architecture")
 
 best_error = -1
@@ -69,21 +71,20 @@ def main():
     #Initialize the transformations
     normalize = augmentations.Normalize(mean = [0.45, 0.45, 0.45],
                                         std = [0.225, 0.225, 0.225])
-    resize = augmentations.Resize()
-    jitter = augmentations.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1)
 
     train_transform = augmentations.Compose([
         augmentations.RandomHorizontalFlip(),
+        augmentations.CentreCrop(),
         augmentations.RandomScaleCrop(),
-        resize,
-        jitter,
+        augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize
     ])
 
     val_transform = augmentations.Compose([
+        augmentations.CentreCrop(),
         augmentations.RandomScaleCrop(),
-        resize,
+        augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize
     ])
@@ -91,7 +92,8 @@ def main():
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.type))
     
-    train_dataset, val_dataset = assert_dataset_type(args, train_transform, val_transform)
+    train_dataset = VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed)
+    val_dataset = VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.scenes)))
@@ -104,15 +106,25 @@ def main():
     )
 
     # Create the model
-    print("=> Creating the correct model for choice {}...".format(args.type))
-    model, model_name = assert_model_type(args)
-    print("The chosen model is {}".format(model_name))
+    print("=> Creating the model...")
+    model = ViT(
+            image_size = 256,
+            patch_size = args.patch_size,
+            num_classes = 6,
+            dim = 1024,
+            depth = 6,
+            heads = 16,
+            mlp_dim = 2048,
+            dropout = 0.1,
+            emb_dropout = 0.1,
+            max_tokens_per_depth=args.token_sampling
+    )
     if args.verbose:
         print(model)
 
     #Load parameters
     if args.pretrained:
-        print("=> Using pre-trained weights for {}".format(model_name))
+        print("=> Using pre-trained weights")
         weights = torch.load(args.pretrained)
         model.load_state_dict(weights['state_dict'], strict=False)
     
@@ -195,6 +207,15 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
 
     end = time.time()
     logger.valid_bar.update(0)
+
+def predict_force(model, images):
+
+    forces = []
+
+    for img in images:
+        force = model(images)
+        forces.append(force)
+    return forces
 
 if __name__ == "__main__":
     main()

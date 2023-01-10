@@ -88,6 +88,20 @@ class RandomScaleCrop(object):
 
         return cropped_images, output_intrinsics
 
+class CentreCrop(object):
+    def __call__(self, images: List[np.ndarray], intrinsics: np.ndarray = None):
+        if intrinsics is not None:
+            output_intrinsics = np.copy(intrinsics)
+        else:
+            output_intrinsics = None
+        
+        in_h, in_w, _ = images[0].shape
+        c_h, c_w = in_h // 2 , in_w // 2
+        cropped_images = [im[c_h - 150:c_h + 150, c_w - 150:c_w + 150] for im in images]
+        if intrinsics is not None:
+            output_intrinsics[0, 2] -= 300
+            output_intrinsics[1, 2] -= 300
+        return cropped_images, output_intrinsics
 
 class SquareResize(object):
     """Resize the image to a square of 256x256"""
