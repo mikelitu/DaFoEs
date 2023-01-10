@@ -67,7 +67,7 @@ class VisionStateDataset(Dataset):
         if self.transform is not None:
             img, _ = self.transform([img], None)
         
-        return {'img': img, 'robot_state': label[:, :-6], 'force': 0.1 * label[:, -6:-3], 'torque': label[:, -3:]}
+        return {'img': img[0], 'robot_state': label[:, :-6], 'force': 0.1 * label[:, -6:-3], 'torque': label[:, -3:]}
     
     def __len__(self):
         return len(self.samples)

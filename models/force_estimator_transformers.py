@@ -228,8 +228,9 @@ class Transformer(nn.Module):
         token_ids = repeat(token_ids, 'n -> b n', b = b)
 
         for attn, ff in self.layers:
-            attn_out, mask, sampled_token_ids = attn(x, mask = mask)
 
+            attn_out, mask, sampled_token_ids = attn(x, mask = mask)
+            
             # when token sampling, one needs to then gather the residual tokens with the sampled token ids
             if exists(sampled_token_ids):
                 x = batched_index_select(x, sampled_token_ids, dim = 1)
@@ -281,6 +282,8 @@ class ViT(nn.Module):
             nn.LayerNorm(dim),
             nn.Linear(dim, num_classes)
         )
+
+
 
     def forward(self, img: Tensor, return_sampled_token_ids: bool = False):
         x = self.to_patch_embedding(img)
