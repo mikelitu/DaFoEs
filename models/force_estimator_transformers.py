@@ -256,7 +256,8 @@ class ViT(nn.Module):
                 channels: int = 3, 
                 dim_head: int = 64, 
                 dropout: float = 0., 
-                emb_dropout:float = 0.) -> None:
+                emb_dropout:float = 0.,
+                state_include: bool = False) -> None:
 
         super().__init__()
         image_height, image_width = pair(image_size)
@@ -276,6 +277,11 @@ class ViT(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
         self.dropout = nn.Dropout(emb_dropout)
 
+        if state_include:
+            self.state_embdder = nn.Conv1d(66, 65, kernel_size=1)
+        else:
+            self.state_embdder = None
+
         self.transformer = Transformer(dim, depth, max_tokens_per_depth, heads, dim_head, mlp_dim, dropout)
 
         self.mlp_head = nn.Sequential(
@@ -285,12 +291,19 @@ class ViT(nn.Module):
 
 
 
-    def forward(self, img: Tensor, return_sampled_token_ids: bool = False):
+    def forward(self, img: Tensor, return_sampled_token_ids: bool = False, robot_state = None):
         x = self.to_patch_embedding(img)
         b, n, _ = x.shape
 
         cls_tokens = repeat(self.cls_token, '() n d -> b n d', b = b)
-        x = torch.cat((cls_tokens, x), dim=1)
+
+        if robot_state is not None:
+            robot_state = F.pad(robot_state, (1, 1024 - robot_state.shape[2] - 1), value = 0)
+            x = torch.cat((cls_tokens, robot_state, x), dim=1)
+            x = self.state_embdder(x)
+        else:
+            x = torch.cat((cls_tokens, x), dim=1)
+
         x += self.pos_embedding[:, :(n + 1)]
         x = self.dropout(x)
 
