@@ -23,6 +23,7 @@ parser = argparse.ArgumentParser(description='Vision and roboto state based forc
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument('data', metavar='DIR', help='path to dataset')
+parser.add_argument('--type', default='vs', choices=['v', 'vs'], type=str, help='model type it can be vision only (v) or vision and state (vs)')
 parser.add_argument('--patch-size', default=32, type=int, metavar='N', help='size of the patches fed into the transformer')
 parser.add_argument('--token-sampling', default=(256, 128, 64, 32, 16, 8), type=tuple, help='sampled token size')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
@@ -35,10 +36,12 @@ parser.add_argument('--print-freq', default=10, type=int, metavar='N', help='pri
 parser.add_argument('--seed', default=0, type=int, help='seed for random function, and network initialization')
 parser.add_argument('--log-summary', default='log_summary.csv', metavar='PATH', help='csv to save the per-epoch train and valid stats')
 parser.add_argument('--log-full', default='log_full.csv', metavar='PATH', help='csv to save the progress per gradient during training')
-parser.add_argument('--log-output', action='store_true', help='will log force estimation ouputs at validation')
+parser.add_argument('--log-output', action='store_true', help='will log force estimation outputs at validation')
 parser.add_argument('--pretrained', default=None, metavar='PATH', help='path to pretrained model')
 parser.add_argument('--name', dest='name', type=str, required=True, help='name of the experiment, checkpoint are stored in checkpoint/name')
 parser.add_argument('--verbose', dest='verbose', type=bool, action="store_true", help="print model architecture")
+parser.add_argument('-r', '--rmse-loss-weight', default=1.0, type=float, help='weight for rroot mean square error loss')
+parser.add_argument('-g', '--gd-loss-weight', default=0.2, type=float, help='weight for gradient difference loss')
 
 best_error = -1
 n_iter = 0
@@ -106,7 +109,15 @@ def main():
     )
 
     # Create the model
-    print("=> Creating the model...")
+    
+
+    if args.type == "v":
+        include_state = False
+    else:
+        include_state = True
+
+    print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
+
     model = ViT(
             image_size = 256,
             patch_size = args.patch_size,
@@ -117,8 +128,10 @@ def main():
             mlp_dim = 2048,
             dropout = 0.1,
             emb_dropout = 0.1,
-            max_tokens_per_depth=args.token_sampling
+            max_tokens_per_depth=args.token_sampling,
+            state_include = include_state
     )
+
     if args.verbose:
         print(model)
 
@@ -131,13 +144,23 @@ def main():
     print("=> Setting Adam optimizer")
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
 
+    #Initialize losses
+    rmse = RMSE()
+    if args.type == "vs":
+        gdl = GDL()
+    else: 
+        gdl = None
+
     with open(args.save_path/args.log_summary, 'w') as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
         writer.writerow(['train_loss', 'validation_loss'])
     
     with open(args.save_path/args.log_full, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss', 'mse_loss'])
+        if args.type == "vs":
+            writer.writerow(['train_loss', 'rmse_loss', 'gdl_loss'])
+        else:
+            writer.writerow(['train_loss', 'rmse_loss'])
     
     logger = TermLogger(n_epochs=args.epochs, train_size=len(train_loader), valid_size=len(val_loader))
     logger.epoch_bar.start()
@@ -147,7 +170,7 @@ def main():
 
         #train for one epoch
         logger.reset_train_bar()
-        train_loss = train(args, train_loader, model, optimizer, logger, training_writer)
+        train_loss = train(args, train_loader, model, optimizer, logger, training_writer, rmse, gdl)
         logger.train_writer.write(' * Avg Loss: {:.3f}'.format(train_loss))
         
         #evaluate the model in validation set
@@ -179,11 +202,12 @@ def main():
             writer.writerow([train_loss, decisive_error])
     logger.epoch_bar.finish()
 
-def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter):
+def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter, rmse: RMSE, gdl: GDL = None):
     global n_iter, device
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
+    losses = AverageMeter(i=1,precision=4)
+    w1, w2 = args.rmse_loss_weight, args.gd_loss_weight
 
     #switch the models to train mode
     model.train()
@@ -192,14 +216,67 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
     logger.train_bar.update(0)
 
     for i, data in enumerate(train_loader):
-        log_losses = i > 0 and n_iter % args.print_freq == 0   
+        log_losses = i > 0 and n_iter % args.print_freq == 0
+        data_time.update(time.time() - end)
+        img = data['img'].to(device)
+        forces = data['forces'].to(device)
 
+        if args.type == 'vs':
+            state = data['robot_state'].to(device)            
+            pred_forces = predict_force_state(model, img, state, True)
+            rmse_loss = rmse(pred_forces, forces)
+            gd_loss = gdl(pred_forces, forces)
+
+            loss = w1 * rmse_loss + w2 * gd_loss
+
+            if log_losses:
+                train_writer.add_scalar('root_mean_square_error', rmse_loss.item(), n_iter)
+                train_writer.add_scalar('gradient_difference_loss', gd_loss.item(), n_iter)
+                train_writer.add_scalar('total_loss', loss.item(), n_iter)
+
+        else:
+            state = None
+            forces = forces.mean(axis=1)
+            pred_forces = predict_force_visu(model, img, True)
+            rmse_loss = rmse(pred_forces, forces)
+
+            loss = w1 * rmse_loss
+
+            if log_losses:
+                train_writer.add_scalar('root_mean_square_error', rmse_loss.item(), n_iter)
+                train_writer.add_scalar('total_loss', loss.item(), n_iter)
+        
+        # record loss and EPE
+        losses.update(loss.item(), args.batch_size)
+
+        # compute gradient and do Adam step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        with open(args.save_path/args.log_full, 'a') as csvfile:
+            writer = csv.writer(csvfile, delimiter='\t')
+            if args.type == 'vs':
+                writer.writerow([loss.item(), rmse_loss.item(), gd_loss.item()])
+            else:
+                writer.writerow([loss.item(), rmse_loss.item()])
+        logger.train_bar.update(i+1)
+        if i % args.print_freq == 0:
+            logger.train_writer.write('Train: Time {} Data {} Loss {}'.format(batch_time, data_time, losses))
+        
+        n_iter += 1
+    
+    return losses.avg[0]
 
 @torch.no_grad()
-def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, output_writers: SummaryWriter = []):
+def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, output_writers: SummaryWriter = [], rmse: RMSE = None, gdl: GDL = None):
     global device
     batch_time = AverageMeter()
-    losses = AverageMeter(i=4, precision=4)
+    losses = AverageMeter(i=3 if args.type=='vs' else 2, precision=4)
     log_outputs = len(output_writers) > 0
 
     #switch to evaluate mode
@@ -208,14 +285,64 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
     end = time.time()
     logger.valid_bar.update(0)
 
-def predict_force(model, images):
+    for i, data in enumerate(val_loader):
+        img = data['img'].to(device)
+        forces = data['forces'].to(device)
 
-    forces = []
+        if args.type == 'vs':
+            state = data['robot_state'].to(device)            
+            pred_forces = predict_force_state(model, img, state, True)
+            rmse_loss = rmse(pred_forces, forces)
+            gd_loss = gdl(pred_forces, forces)
+            loss = rmse_loss + gd_loss
+            losses.update([loss.item(), rmse_loss.item(), gd_loss.item()])
 
-    for img in images:
-        force = model(images)
-        forces.append(force)
-    return forces
+        else:
+            state = None
+            forces = forces.mean(axis=1)
+            pred_forces = predict_force_visu(model, img, True)
+            rmse_loss = rmse(pred_forces, forces)
+            losses.update([rmse_loss.item(), rmse_loss.item()])
+        
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+        logger.valid_bar.update(i+1)
+        if i % args.print_freq == 0:
+            logger.valid_writer.write('Valid: Time {} Loss {}'.format(batch_time, losses))
+    
+    logger.valid_bar.update(len(val_loader))
+    return losses.avg, ['Total loss', 'RMSE loss', 'GDL loss'] if args.type=='vs' else ['Total loss', 'RMSE loss']
 
+
+def predict_force_state(model, images, state, is_train = True):
+    preds_forces = torch.zeros(*state.shape)
+
+    if is_train:
+        sampled_token_ids = False
+    else:
+        sampled_token_ids = True
+    
+    for i in range(state.shape[1]):
+        if not sampled_token_ids:
+            preds_forces[:, i, :] = model(images, sampled_token_ids, state[:, i, :].unsqueeze(1))
+        else:
+            preds_forces[:, i, :], token_ids = model(images, sampled_token_ids, state[:, i, :].unsqueeze(1))
+    
+    return preds_forces if is_train else (preds_forces, token_ids)
+
+def predict_force_visu(model, images, is_train = True):
+
+    if is_train:
+        sampled_token_ids = False
+        pred_forces = model(images, sampled_token_ids, None)
+    else:
+        sampled_token_ids = True
+        pred_forces, token_ids = model(images, sampled_token_ids, None)
+    
+    return pred_forces if is_train else (pred_forces, token_ids)
+
+
+    
 if __name__ == "__main__":
     main()

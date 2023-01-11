@@ -52,13 +52,16 @@ class Recorder(nn.Module):
         self.attn_recordings.clear()
         self.samp_recordings.clear()
 
-    def forward(self, img, return_sampled_token_ids: bool = False):
+    def forward(self, img: torch.Tensor, return_sampled_token_ids: bool = False, robot_state: torch.Tensor = None):
         assert not self.ejected, 'recorder has been ejected, cannot be used anymore'
         self.clear()
         if not self.hook_registered:
             self._register_hook()
 
-        pred, token_ids = self.vit(img, return_sampled_token_ids)
+        if return_sampled_token_ids:
+            pred, token_ids = self.vit(img, return_sampled_token_ids, robot_state)
+        else:
+            pred = self.vit(img, return_sampled_token_ids, robot_state)
 
         # move all recordings to one device before stacking
         target_device = self.device if self.device is not None else img.device

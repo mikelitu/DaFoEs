@@ -45,15 +45,16 @@ class VisionStateDataset(Dataset):
         samples = []
 
         for scene in self.scenes:
-            labels = np.array(pd.read_csv(scene/'labels.csv'))
+            labels = np.array(pd.read_csv(scene/'labels.csv')).astype(np.float32)
             norm_labels = normalize_labels(labels)
             images = sorted(scene.files("*.png"))
             n_labels = len(norm_labels) // len(images)
+            step = 7
 
             for i in range(len(images)):
                 sample = {}
                 sample['img'] = images[i]
-                sample['label'] = norm_labels[n_labels*i: (n_labels*i) + n_labels]
+                sample['label'] = norm_labels[n_labels*i: (n_labels*i) + step]
                 samples.append(sample)
         
         random.shuffle(samples)
@@ -63,11 +64,13 @@ class VisionStateDataset(Dataset):
         sample = self.samples[index]
         img = load_as_float(sample['img'])
         label = sample['label']
+        label[:, -6:-3] = 0.1 * label[:, -6:-3]
 
         if self.transform is not None:
             img, _ = self.transform([img], None)
+            img = img[0]
         
-        return {'img': img[0], 'robot_state': label[:, :-6], 'force': 0.1 * label[:, -6:-3], 'torque': label[:, -3:]}
+        return {'img': img, 'robot_state': label[:, :-6], 'forces': label[:, -6:]}
     
     def __len__(self):
         return len(self.samples)

@@ -8,5 +8,4 @@ tensorboard
 blessings
 progressbar2
 scipy
-vit-pytorch
 tensorbardx
