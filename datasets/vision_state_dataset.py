@@ -8,7 +8,9 @@ import numpy as np
 import random
 from path import Path
 import pandas as pd
+from PIL import ImageFile
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def load_as_float(path: Path) -> np.ndarray:
@@ -64,7 +66,6 @@ class VisionStateDataset(Dataset):
         sample = self.samples[index]
         img = load_as_float(sample['img'])
         label = sample['label']
-        label[:, -6:-3] = 0.1 * label[:, -6:-3]
 
         if self.transform is not None:
             img, _ = self.transform([img], None)

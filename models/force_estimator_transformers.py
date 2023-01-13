@@ -5,7 +5,7 @@ from torch import nn, einsum
 from torch import Tensor, device
 
 from einops import rearrange, repeat
-from einops.layers.torch import Rearrange
+from einops.layers.torch import Rearrange, Reduce
 from typing import Tuple
 
 
@@ -195,6 +195,11 @@ class Attention(nn.Module):
 
         return self.to_out(out), mask, sampled_token_ids
 
+
+## I need to modify the architecture to include the robot state inside the transformer
+# Add the state as an additional patch at the last layer of the transformer so the visual
+# data needed is reduced.
+
 class Transformer(nn.Module):
     def __init__(self, 
                 dim: int, 
@@ -285,6 +290,7 @@ class ViT(nn.Module):
         self.transformer = Transformer(dim, depth, max_tokens_per_depth, heads, dim_head, mlp_dim, dropout)
 
         self.mlp_head = nn.Sequential(
+            Reduce('b n e -> b e', reduction='mean'),
             nn.LayerNorm(dim),
             nn.Linear(dim, num_classes)
         )
@@ -308,8 +314,9 @@ class ViT(nn.Module):
         x = self.dropout(x)
 
         x, token_ids = self.transformer(x)
+        logits = self.mlp_head(x)
 
-        logits = self.mlp_head(x[:, 0])
+        #logits = self.mlp_head(x[:, 0])
 
         if return_sampled_token_ids:
             # remove CLS token and decrement by 1 to make -1 the padding

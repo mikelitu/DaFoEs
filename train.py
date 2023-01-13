@@ -39,7 +39,6 @@ parser.add_argument('--log-full', default='log_full.csv', metavar='PATH', help='
 parser.add_argument('--log-output', action='store_true', help='will log force estimation outputs at validation')
 parser.add_argument('--pretrained', default=None, metavar='PATH', help='path to pretrained model')
 parser.add_argument('--name', dest='name', type=str, required=True, help='name of the experiment, checkpoint are stored in checkpoint/name')
-parser.add_argument('--verbose', dest='verbose', type=bool, action="store_true", help="print model architecture")
 parser.add_argument('-r', '--rmse-loss-weight', default=1.0, type=float, help='weight for rroot mean square error loss')
 parser.add_argument('-g', '--gd-loss-weight', default=0.2, type=float, help='weight for gradient difference loss')
 
@@ -55,7 +54,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = 'checkpoints'/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force'/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -132,8 +131,7 @@ def main():
             state_include = include_state
     )
 
-    if args.verbose:
-        print(model)
+    model.to(device)
 
     #Load parameters
     if args.pretrained:
@@ -175,7 +173,7 @@ def main():
         
         #evaluate the model in validation set
         logger.reset_valid_bar()
-        errors, error_names = validate(args, val_loader, model, epoch, logger, output_writers)
+        errors, error_names = validate(args, val_loader, model, epoch, logger, output_writers, rmse=rmse, gdl=gdl)
         error_string = ', '.join('{} : {:.3f}'.format(name, error) for name, error in zip(error_names, errors))
         logger.valid_writer.write(' * Avg {}'.format(error_string))
 
@@ -223,7 +221,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            pred_forces = predict_force_state(model, img, state, True)
+            pred_forces = predict_force_state(model, img, state, forces, True)
             rmse_loss = rmse(pred_forces, forces)
             gd_loss = gdl(pred_forces, forces)
 
@@ -291,7 +289,7 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            pred_forces = predict_force_state(model, img, state, True)
+            pred_forces = predict_force_state(model, img, state, forces, True)
             rmse_loss = rmse(pred_forces, forces)
             gd_loss = gdl(pred_forces, forces)
             loss = rmse_loss + gd_loss
@@ -315,8 +313,8 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
     return losses.avg, ['Total loss', 'RMSE loss', 'GDL loss'] if args.type=='vs' else ['Total loss', 'RMSE loss']
 
 
-def predict_force_state(model, images, state, is_train = True):
-    preds_forces = torch.zeros(*state.shape)
+def predict_force_state(model, images, state, forces, is_train = True):
+    preds_forces = torch.zeros(*forces.shape).to(device)
 
     if is_train:
         sampled_token_ids = False
@@ -341,7 +339,6 @@ def predict_force_visu(model, images, is_train = True):
         pred_forces, token_ids = model(images, sampled_token_ids, None)
     
     return pred_forces if is_train else (pred_forces, token_ids)
-
 
     
 if __name__ == "__main__":
