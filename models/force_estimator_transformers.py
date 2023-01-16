@@ -282,18 +282,33 @@ class ViT(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
         self.dropout = nn.Dropout(emb_dropout)
 
-        if state_include:
-            self.state_embdder = nn.Conv1d(66, 65, kernel_size=1)
-        else:
-            self.state_embdder = None
-
         self.transformer = Transformer(dim, depth, max_tokens_per_depth, heads, dim_head, mlp_dim, dropout)
 
-        self.mlp_head = nn.Sequential(
-            Reduce('b n e -> b e', reduction='mean'),
-            nn.LayerNorm(dim),
-            nn.Linear(dim, num_classes)
-        )
+        self.reduce = Reduce('b n e -> b e', reduction='mean')
+
+        if state_include:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(dim + 25),
+                nn.Linear(dim + 25, 500),
+                nn.ReLU(),
+                nn.Linear(500, 200),
+                nn.ReLU(),
+                nn.Linear(200, 50),
+                nn.ReLU(),
+                nn.Linear(50, num_classes)
+            )
+        
+        else:
+            self.mlp_head = nn.Sequential(
+                nn.LayerNorm(dim),
+                nn.Linear(dim, 500),
+                nn.ReLU(),
+                nn.Linear(500, 200),
+                nn.ReLU(),
+                nn.Linear(200, 50),
+                nn.ReLU(),
+                nn.Linear(50, num_classes)
+            )
 
 
 
@@ -303,19 +318,21 @@ class ViT(nn.Module):
 
         cls_tokens = repeat(self.cls_token, '() n d -> b n d', b = b)
 
-        if robot_state is not None:
-            robot_state = F.pad(robot_state, (1, 1024 - robot_state.shape[2] - 1), value = 0)
-            x = torch.cat((cls_tokens, robot_state, x), dim=1)
-            x = self.state_embdder(x)
-        else:
-            x = torch.cat((cls_tokens, x), dim=1)
+        x = torch.cat((cls_tokens, x), dim=1)
 
         x += self.pos_embedding[:, :(n + 1)]
         x = self.dropout(x)
+        
 
         x, token_ids = self.transformer(x)
-        logits = self.mlp_head(x)
 
+        x = self.reduce(x)
+
+        if robot_state is not None:
+            x = torch.cat((x, robot_state.squeeze(1)), dim=1)
+
+        logits = self.mlp_head(x)
+        
         #logits = self.mlp_head(x[:, 0])
 
         if return_sampled_token_ids:

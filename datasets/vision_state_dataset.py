@@ -26,7 +26,7 @@ class VisionStateDataset(Dataset):
         root/scene_1/000.png
         root/scene_1/001.png
         ...
-        root/scene_1/labels.txt
+        root/scene_1/labels.csv
         root/scene_2/000.png
         .
         transform functions takes in a list images and a numpy array representing the intrinsics of the camera and the robot state
