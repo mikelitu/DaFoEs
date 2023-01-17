@@ -192,12 +192,13 @@ def main():
             writer.writerow([train_loss, decisive_error])
     logger.epoch_bar.finish()
 
-def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter, rmse: nn.MSELoss):
+def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter, mse: nn.MSELoss):
     global n_iter, device
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter(i=1,precision=4)
     w1, w2 = args.rmse_loss_weight, args.gd_loss_weight
+    l1_lambda = 1e-3
 
     #switch the models to train mode
     model.train()
@@ -214,24 +215,25 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
             pred_forces = predict_force_state(model, img, state, forces, True)
-            rmse_loss = rmse(pred_forces, forces)
-
-            loss = w1 * rmse_loss
+            mse_loss = mse(pred_forces, forces)
+            # Add L1 regularization
+            l1_norm = sum(p.abs().sum() for p in model.parameters())
+            loss = w1 * mse_loss + l1_lambda * l1_norm
 
             if log_losses:
-                train_writer.add_scalar('mean_square_error', rmse_loss.item(), n_iter)
+                train_writer.add_scalar('mean_square_error', mse_loss.item(), n_iter)
                 train_writer.add_scalar('total_loss', loss.item(), n_iter)
 
         else:
             state = None
             forces = forces.mean(axis=1)
             pred_forces = predict_force_visu(model, img, True)
-            rmse_loss = rmse(pred_forces, forces)
-
-            loss = w1 * rmse_loss
+            mse_loss = mse(pred_forces, forces)
+            l1_norm = sum(p.abs().sum() for p in model.parameters())
+            loss = w1 * mse_loss + l1_lambda * l1_norm
 
             if log_losses:
-                train_writer.add_scalar('mean_square_error', rmse_loss.item(), n_iter)
+                train_writer.add_scalar('mean_square_error', mse_loss.item(), n_iter)
                 train_writer.add_scalar('total_loss', loss.item(), n_iter)
         
         # record loss and EPE
@@ -249,9 +251,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
         with open(args.save_path/args.log_full, 'a') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
             if args.type == 'vs':
-                writer.writerow([loss.item(), rmse_loss.item()])
+                writer.writerow([loss.item(), mse_loss.item()])
             else:
-                writer.writerow([loss.item(), rmse_loss.item()])
+                writer.writerow([loss.item(), mse_loss.item()])
         logger.train_bar.update(i+1)
         if i % args.print_freq == 0:
             logger.train_writer.write('Train: Time {} Data {} Loss {}'.format(batch_time, data_time, losses))
@@ -261,8 +263,8 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
     return losses.avg[0]
 
 @torch.no_grad()
-def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, output_writers: SummaryWriter = [], rmse = None):
-    global device
+def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, output_writers: SummaryWriter = [], mse = None):
+    global devic
     batch_time = AverageMeter()
     losses = AverageMeter(i=2, precision=4)
     log_outputs = len(output_writers) > 0
@@ -280,16 +282,16 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
             pred_forces = predict_force_state(model, img, state, forces, True)
-            rmse_loss = rmse(pred_forces, forces)
-            loss = rmse_loss
-            losses.update([loss.item(), rmse_loss.item()])
+            mse_loss = mse(pred_forces, forces)
+            loss = mse_loss
+            losses.update([loss.item(), mse_loss.item()])
 
         else:
             state = None
             forces = forces.mean(axis=1)
             pred_forces = predict_force_visu(model, img, True)
-            rmse_loss = rmse(pred_forces, forces)
-            losses.update([rmse_loss.item(), rmse_loss.item()])
+            mse_loss = mse(pred_forces, forces)
+            losses.update([mse_loss.item(), mse_loss.item()])
         
         # measure elapsed time
         batch_time.update(time.time() - end)
