@@ -290,10 +290,13 @@ class ViT(nn.Module):
             self.mlp_head = nn.Sequential(
                 nn.LayerNorm(dim + 25),
                 nn.Linear(dim + 25, 500),
+                nn.BatchNorm1d(500),
                 nn.ReLU(),
                 nn.Linear(500, 200),
+                nn.BatchNorm1d(200),
                 nn.ReLU(),
                 nn.Linear(200, 50),
+                nn.BatchNorm1d(50),
                 nn.ReLU(),
                 nn.Linear(50, num_classes)
             )
@@ -302,10 +305,13 @@ class ViT(nn.Module):
             self.mlp_head = nn.Sequential(
                 nn.LayerNorm(dim),
                 nn.Linear(dim, 500),
+                nn.BatchNorm1d(500),
                 nn.ReLU(),
                 nn.Linear(500, 200),
+                nn.BatchNorm1d(200),
                 nn.ReLU(),
                 nn.Linear(200, 50),
+                nn.BatchNorm1d(50),
                 nn.ReLU(),
                 nn.Linear(50, num_classes)
             )
