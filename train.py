@@ -27,8 +27,8 @@ parser.add_argument('--type', default='vs', choices=['v', 'vs'], type=str, help=
 parser.add_argument('--patch-size', default=32, type=int, metavar='N', help='size of the patches fed into the transformer')
 parser.add_argument('--token-sampling', default=(256, 128, 64, 32, 16, 8), type=tuple, help='sampled token size')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
-parser.add_argument('-b', '--batch-size', default=32, type=int, metavar='N', help='mini-batch size')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, metavar='LR', help='initial learning rate')
+parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N', help='mini-batch size')
+parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum for sgd, alpha parameter for adam')
 parser.add_argument('--beta', default=0.999, type=float, metavar='M', help='beta parameters for adam')
 parser.add_argument('--weight-decay', '--wd', default=0, type=float, metavar='W', help='weight decay')
@@ -39,8 +39,8 @@ parser.add_argument('--log-full', default='log_full.csv', metavar='PATH', help='
 parser.add_argument('--log-output', action='store_true', help='will log force estimation outputs at validation')
 parser.add_argument('--pretrained', default=None, metavar='PATH', help='path to pretrained model')
 parser.add_argument('--name', dest='name', type=str, required=True, help='name of the experiment, checkpoint are stored in checkpoint/name')
-parser.add_argument('-r', '--rmse-loss-weight', default=1.0, type=float, help='weight for rroot mean square error loss')
-parser.add_argument('-g', '--gd-loss-weight', default=0.2, type=float, help='weight for gradient difference loss')
+parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='weight for rroot mean square error loss')
+parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 
 best_error = -1
 n_iter = 0
@@ -75,7 +75,6 @@ def main():
                                         std = [0.225, 0.225, 0.225])
 
     train_transform = augmentations.Compose([
-        augmentations.RandomHorizontalFlip(),
         augmentations.CentreCrop(),
         augmentations.RandomScaleCrop(),
         augmentations.SquareResize(),
@@ -143,11 +142,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
 
     #Initialize losses
-    rmse = RMSE()
-    if args.type == "vs":
-        gdl = GDL()
-    else: 
-        gdl = None
+    rmse = nn.MSELoss()
 
     with open(args.save_path/args.log_summary, 'w') as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
@@ -155,10 +150,7 @@ def main():
     
     with open(args.save_path/args.log_full, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        if args.type == "vs":
-            writer.writerow(['train_loss', 'rmse_loss', 'gdl_loss'])
-        else:
-            writer.writerow(['train_loss', 'rmse_loss'])
+        writer.writerow(['train_loss', 'mse_loss'])
     
     logger = TermLogger(n_epochs=args.epochs, train_size=len(train_loader), valid_size=len(val_loader))
     logger.epoch_bar.start()
@@ -168,12 +160,12 @@ def main():
 
         #train for one epoch
         logger.reset_train_bar()
-        train_loss = train(args, train_loader, model, optimizer, logger, training_writer, rmse, gdl)
+        train_loss = train(args, train_loader, model, optimizer, logger, training_writer, rmse)
         logger.train_writer.write(' * Avg Loss: {:.3f}'.format(train_loss))
         
         #evaluate the model in validation set
         logger.reset_valid_bar()
-        errors, error_names = validate(args, val_loader, model, epoch, logger, output_writers, rmse=rmse, gdl=gdl)
+        errors, error_names = validate(args, val_loader, model, epoch, logger, output_writers, rmse=rmse)
         error_string = ', '.join('{} : {:.3f}'.format(name, error) for name, error in zip(error_names, errors))
         logger.valid_writer.write(' * Avg {}'.format(error_string))
 
@@ -181,7 +173,7 @@ def main():
             training_writer.add_scalar(name, error, epoch)
         
         #Choose here which is the error you want to consider
-        decisive_error = errors[0]
+        decisive_error = errors[1]
         if best_error < 0:
             best_error = decisive_error
 
@@ -200,7 +192,7 @@ def main():
             writer.writerow([train_loss, decisive_error])
     logger.epoch_bar.finish()
 
-def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter, rmse: RMSE, gdl: GDL = None):
+def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter, rmse: nn.MSELoss):
     global n_iter, device
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -223,13 +215,11 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
             state = data['robot_state'].to(device)            
             pred_forces = predict_force_state(model, img, state, forces, True)
             rmse_loss = rmse(pred_forces, forces)
-            gd_loss = gdl(pred_forces, forces)
 
-            loss = w1 * rmse_loss + w2 * gd_loss
+            loss = w1 * rmse_loss
 
             if log_losses:
-                train_writer.add_scalar('root_mean_square_error', rmse_loss.item(), n_iter)
-                train_writer.add_scalar('gradient_difference_loss', gd_loss.item(), n_iter)
+                train_writer.add_scalar('mean_square_error', rmse_loss.item(), n_iter)
                 train_writer.add_scalar('total_loss', loss.item(), n_iter)
 
         else:
@@ -241,7 +231,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
             loss = w1 * rmse_loss
 
             if log_losses:
-                train_writer.add_scalar('root_mean_square_error', rmse_loss.item(), n_iter)
+                train_writer.add_scalar('mean_square_error', rmse_loss.item(), n_iter)
                 train_writer.add_scalar('total_loss', loss.item(), n_iter)
         
         # record loss and EPE
@@ -259,7 +249,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
         with open(args.save_path/args.log_full, 'a') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
             if args.type == 'vs':
-                writer.writerow([loss.item(), rmse_loss.item(), gd_loss.item()])
+                writer.writerow([loss.item(), rmse_loss.item()])
             else:
                 writer.writerow([loss.item(), rmse_loss.item()])
         logger.train_bar.update(i+1)
@@ -271,10 +261,10 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
     return losses.avg[0]
 
 @torch.no_grad()
-def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, output_writers: SummaryWriter = [], rmse: RMSE = None, gdl: GDL = None):
+def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, output_writers: SummaryWriter = [], rmse = None):
     global device
     batch_time = AverageMeter()
-    losses = AverageMeter(i=3 if args.type=='vs' else 2, precision=4)
+    losses = AverageMeter(i=2, precision=4)
     log_outputs = len(output_writers) > 0
 
     #switch to evaluate mode
@@ -291,9 +281,8 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
             state = data['robot_state'].to(device)            
             pred_forces = predict_force_state(model, img, state, forces, True)
             rmse_loss = rmse(pred_forces, forces)
-            gd_loss = gdl(pred_forces, forces)
-            loss = rmse_loss + gd_loss
-            losses.update([loss.item(), rmse_loss.item(), gd_loss.item()])
+            loss = rmse_loss
+            losses.update([loss.item(), rmse_loss.item()])
 
         else:
             state = None
@@ -310,7 +299,7 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
             logger.valid_writer.write('Valid: Time {} Loss {}'.format(batch_time, losses))
     
     logger.valid_bar.update(len(val_loader))
-    return losses.avg, ['Total loss', 'RMSE loss', 'GDL loss'] if args.type=='vs' else ['Total loss', 'RMSE loss']
+    return losses.avg, ['Total loss', 'MSE loss']
 
 
 def predict_force_state(model, images, state, forces, is_train = True):
