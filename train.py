@@ -142,7 +142,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
 
     #Initialize losses
-    rmse = nn.MSELoss()
+    mse = nn.MSELoss()
 
     with open(args.save_path/args.log_summary, 'w') as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
@@ -160,12 +160,12 @@ def main():
 
         #train for one epoch
         logger.reset_train_bar()
-        train_loss = train(args, train_loader, model, optimizer, logger, training_writer, rmse)
+        train_loss = train(args, train_loader, model, optimizer, logger, training_writer, mse)
         logger.train_writer.write(' * Avg Loss: {:.3f}'.format(train_loss))
         
         #evaluate the model in validation set
         logger.reset_valid_bar()
-        errors, error_names = validate(args, val_loader, model, epoch, logger, output_writers, rmse=rmse)
+        errors, error_names = validate(args, val_loader, model, epoch, logger, output_writers, mse=mse)
         error_string = ', '.join('{} : {:.3f}'.format(name, error) for name, error in zip(error_names, errors))
         logger.valid_writer.write(' * Avg {}'.format(error_string))
 
