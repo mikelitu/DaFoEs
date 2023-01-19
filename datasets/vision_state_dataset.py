@@ -68,7 +68,7 @@ class VisionStateDataset(Dataset):
         label = sample['label']
 
         if self.transform is not None:
-            img, _ = self.transform([img], None)
+            img = self.transform([img])
             img = img[0]
         
         return {'img': img, 'robot_state': label[:, :-6], 'forces': label[:, -6:]}
