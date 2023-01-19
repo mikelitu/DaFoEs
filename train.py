@@ -73,18 +73,20 @@ def main():
     #Initialize the transformations
     normalize = augmentations.Normalize(mean = [0.45, 0.45, 0.45],
                                         std = [0.225, 0.225, 0.225])
+    
+    noise = augmentations.GaussianNoise(noise_factor = 0.3)
 
     train_transform = augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.RandomScaleCrop(),
         augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
-        normalize
+        normalize,
+        noise
     ])
 
     val_transform = augmentations.Compose([
         augmentations.CentreCrop(),
-        augmentations.RandomScaleCrop(),
         augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize
@@ -198,7 +200,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
     data_time = AverageMeter()
     losses = AverageMeter(i=1,precision=4)
     w1, w2 = args.rmse_loss_weight, args.gd_loss_weight
-    l1_lambda = 1e-3
+    l1_lambda = 1e-4
 
     #switch the models to train mode
     model.train()
