@@ -89,8 +89,3 @@ class GaussianNoise(object):
         noisy_imgs = [img + torch.randn_like(img) * noise_factor for img in images]
         noisy_imgs = [torch.clip(img, 0., 1.) for img in noisy_imgs]
         return noisy_imgs
-
-
-
-    
-    
