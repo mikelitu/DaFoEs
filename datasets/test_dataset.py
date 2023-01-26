@@ -18,5 +18,5 @@ def normalize_labels(labels: np.ndarray, eps=1e-10) -> np.ndarray:
 
 class TestDataset(Dataset):
 
-    def __init__(self, test_folder: Path) -> None:
+    def __init__(self, test_folder: str, transforms = None) -> None:
         super().__init__()

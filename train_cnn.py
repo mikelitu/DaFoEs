@@ -113,46 +113,35 @@ def main():
 
     if args.type == "v":
         include_state = False
+        cnn_model = ForceEstimatorV(final_layer=6)
     else:
         include_state = True
+        cnn_model = ForceEstimatorVS(rs_size=25, final_layer=30)
 
     print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
 
-    vit_model = ViT(
-            image_size = 256,
-            patch_size = args.patch_size,
-            num_classes = 6,
-            dim = 1024,
-            depth = 6,
-            heads = 16,
-            mlp_dim = 2048,
-            dropout = 0.1,
-            emb_dropout = 0.1,
-            max_tokens_per_depth=args.token_sampling,
-            state_include = include_state
-    )
-
-    vit_model.to(device)
+    cnn_model.to(device)
 
     #Load parameters
+
     if args.pretrained:
-        print("=> Using pre-trained weights for ViT")
-        weights_vit = torch.load(args.pretrained)
-        vit_model.load_state_dict(weights_vit['state_dict'], strict=False)
+        print("=> Using pre-trained weights for CNN")
+        weights_cnn = torch.load(args.pretrained)
+        cnn_model.load_state_dict(weights_cnn['state_dict'], strict=False)
     
     print("=> Setting Adam optimizer")
-    vit_optimizer = torch.optim.Adam(vit_model.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
-    
+    cnn_optimizer = torch.optim.Adam(cnn_model.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
+
     #Initialize losses
     mse = nn.MSELoss()
 
     with open(args.save_path/args.log_summary, 'w') as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss_vit', 'validation_loss_vit'])
+        writer.writerow(['train_loss_cnn', 'validation_loss_cnn'])
     
     with open(args.save_path/args.log_full, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss_vit', 'mse_loss_vit'])
+        writer.writerow(['train_loss_cnn', 'mse_loss_cnn'])
     
     logger = TermLogger(n_epochs=args.epochs, train_size=len(train_loader), valid_size=len(val_loader))
     logger.epoch_bar.start()
@@ -162,12 +151,12 @@ def main():
 
         #train for one epoch
         logger.reset_train_bar()
-        train_loss = train(args, train_loader, vit_model, vit_optimizer, logger, training_writer, mse)
+        train_loss = train(args, train_loader, cnn_model, cnn_optimizer, logger, training_writer, mse)
         logger.train_writer.write(' * Avg Loss: {:.3f}'.format(train_loss))
         
         #evaluate the model in validation set
         logger.reset_valid_bar()
-        errors, error_names = validate(args, val_loader, vit_model, logger, output_writers, mse=mse)
+        errors, error_names = validate(args, val_loader, cnn_model, logger, output_writers, mse=mse)
         error_string = ', '.join('{} : {:.3f}'.format(name, error) for name, error in zip(error_names, errors))
         logger.valid_writer.write(' * Avg {}'.format(error_string))
 
@@ -176,7 +165,6 @@ def main():
         
         #Choose here which is the error you want to consider
         decisive_error = errors[0]
-
         if best_error < 0:
             best_error = decisive_error
 
@@ -186,7 +174,7 @@ def main():
         save_checkpoint(
             args.save_path, {
                 'epoch': epoch + 1,
-                'state_dict': vit_model.state_dict(),
+                'state_dict': cnn_model.state_dict(),
             },
             is_best)
         
@@ -196,7 +184,7 @@ def main():
     logger.epoch_bar.finish()
 
 
-def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vit_model: nn.Module, vit_optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter, mse: nn.MSELoss):
+def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cnn_model: nn.Module, cnn_optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter, mse: nn.MSELoss):
     global n_iter, device
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -205,7 +193,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vi
     l1_lambda = 1e-4
 
     #switch the vit_models to train mode
-    vit_model.train()
+    cnn_model.train()
 
     end = time.time()
     logger.train_bar.update(0)
@@ -218,38 +206,36 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vi
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            pred_forces_vit = vit_predict_force_state(vit_model, img, state, forces, True)
-            mse_loss_vit = mse(pred_forces_vit, forces)
-            # Add L1 regularization
-            l1_norm_vit = sum(p.abs().sum() for p in vit_model.parameters())
-            loss_vit = w1 * mse_loss_vit + l1_lambda * l1_norm_vit
+            pred_forces_cnn = cnn_predict_force_state(cnn_model, img, state, forces)
+            mse_loss_cnn = mse(pred_forces_cnn, forces)
+
+            l1_norm_cnn = sum(p.abs().sum() for p in cnn_model.parameters())        
+            loss_cnn = w1 * mse_loss_cnn + l1_lambda * l1_norm_cnn
 
             if log_losses:
-                train_writer.add_scalar('MSE_ViT', mse_loss_vit.item(), n_iter)
-                train_writer.add_scalar('Loss_ViT', loss_vit.item(), n_iter)
+                train_writer.add_scalar('MSE_CNN', mse_loss_cnn.item(), n_iter)
+                train_writer.add_scalar('Loss_CNN', loss_cnn.item(), n_iter)
 
         else:
             state = None
             forces = forces.mean(axis=1)
-            pred_forces_vit = vit_predict_force_visu(vit_model, img, True)
-            mse_loss_vit = mse(pred_forces_vit, forces)
 
-            # Add L1 regularization
-            l1_norm_vit = sum(p.abs().sum() for p in vit_model.parameters())
-            loss_vit = w1 * mse_loss_vit + l1_lambda * l1_norm_vit
-
+            pred_forces_cnn = cnn_predict_force_visu(cnn_model, img)
+            mse_loss_cnn = mse(pred_forces_cnn, forces)
+            l1_norm_cnn = sum(p.abs().sum() for p in cnn_model.parameters())        
+            loss_cnn = w1 * mse_loss_cnn + l1_lambda * l1_norm_cnn
 
             if log_losses:
-                train_writer.add_scalar('MSE_ViT', mse_loss_vit.item(), n_iter)
-                train_writer.add_scalar('Loss_ViT', loss_vit.item(), n_iter)
+                train_writer.add_scalar('MSE_CNN', mse_loss_cnn.item(), n_iter)
+                train_writer.add_scalar('Loss_CNN', loss_cnn.item(), n_iter)
         
         # record loss and EPE
-        losses.update([loss_vit.item(), mse_loss_vit.item()], args.batch_size)
+        losses.update([loss_cnn.item(), mse_loss_cnn.item()], args.batch_size)
 
-        # compute gradient and do Adam step for vit
-        vit_optimizer.zero_grad()
-        loss_vit.backward()
-        vit_optimizer.step()
+        # compute gradient and do Adam step for cnn
+        cnn_optimizer.zero_grad()
+        loss_cnn.backward()
+        cnn_optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -258,9 +244,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vi
         with open(args.save_path/args.log_full, 'a') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
             if args.type == 'vs':
-                writer.writerow([loss_vit.item(), mse_loss_vit.item()])
+                writer.writerow([loss_cnn.item(), mse_loss_cnn.item()])
             else:
-                writer.writerow([loss_vit.item(), mse_loss_vit.item()])
+                writer.writerow([loss_cnn.item(), mse_loss_cnn.item()])
 
         logger.train_bar.update(i+1)
         if i % args.print_freq == 0:
@@ -271,14 +257,14 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vi
     return losses.avg[0]
 
 @torch.no_grad()
-def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vit_model: nn.Module, logger: TermLogger, output_writers: SummaryWriter = [], mse = None):
+def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, cnn_model: nn.Module, logger: TermLogger, output_writers: SummaryWriter = [], mse = None):
     global devic
     batch_time = AverageMeter()
     losses = AverageMeter(i=1, precision=4)
     log_outputs = len(output_writers) > 0
 
     #switch to evaluate mode
-    vit_model.eval()
+    cnn_model.eval()
 
     end = time.time()
     logger.valid_bar.update(0)
@@ -289,16 +275,16 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vi
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            vit_pred_forces = vit_predict_force_state(vit_model, img, state, forces, True)
-            vit_loss = mse(vit_pred_forces, forces)
-            losses.update([vit_loss.item()])
+            cnn_pred_forces = cnn_predict_force_state(cnn_model, img, state, forces)
+            cnn_loss = mse(cnn_pred_forces, forces)
+            losses.update([cnn_loss.item()])
 
         else:
             state = None
             forces = forces.mean(axis=1)
-            vit_pred_forces = vit_predict_force_visu(vit_model, img, True)
-            vit_loss = mse(vit_pred_forces, forces)
-            losses.update([vit_loss.item()])
+            cnn_pred_forces = cnn_predict_force_visu(cnn_model, img)
+            cnn_loss = mse(cnn_pred_forces, forces)
+            losses.update([cnn_loss.item()])
         
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -308,35 +294,20 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vi
             logger.valid_writer.write('Valid: Time {} Loss {}'.format(batch_time, losses))
     
     logger.valid_bar.update(len(val_loader))
-    return losses.avg, ['ViT Loss']
+    return losses.avg, ['CNN Loss']
 
-
-def vit_predict_force_state(model, images, state, forces, is_train = True):
+def cnn_predict_force_state(model, images, state, forces):
     preds_forces = torch.zeros(*forces.shape).to(device)
-
-    if is_train:
-        sampled_token_ids = False
-    else:
-        sampled_token_ids = True
     
     for i in range(state.shape[1]):
-        if not sampled_token_ids:
-            preds_forces[:, i, :] = model(images, sampled_token_ids, state[:, i, :].unsqueeze(1))
-        else:
-            preds_forces[:, i, :], token_ids = model(images, sampled_token_ids, state[:, i, :].unsqueeze(1))
-    
-    return preds_forces if is_train else (preds_forces, token_ids)
+        preds_forces[:, i, :] = model(images, state[:, i, :])
+    return preds_forces
 
-def vit_predict_force_visu(model, images, is_train = True):
+def cnn_predict_force_visu(model, images):
 
-    if is_train:
-        sampled_token_ids = False
-        pred_forces = model(images, sampled_token_ids, None)
-    else:
-        sampled_token_ids = True
-        pred_forces, token_ids = model(images, sampled_token_ids, None)
+    pred_forces = model(images)
     
-    return pred_forces if is_train else (pred_forces, token_ids)
+    return pred_forces
 
     
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ class ResNet18(nn.Module):
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=7, stride=2, padding=3)
         self.bn1 = BatchNorm2d(64)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.relu = nn.ReLU(inplace=False)
 
         self.layer1 = nn.Sequential(
             ResBlock2d(in_features=64, kernel_size=3, padding=1, stride=False),
@@ -39,18 +40,18 @@ class ResNet18(nn.Module):
             ResBlock2d(in_features=512, kernel_size=3, padding=1, stride=False)
         )
 
-        self.final = nn.Linear(in_features=512*7*7, out_features=final_features)
+        self.final = nn.Linear(in_features=512*8*8, out_features=final_features)
         
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         
         out = self.maxpool(self.bn1(self.conv1(image)))
-        out = F.relu(out)
+        out = self.relu(out)
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
         out = self.layer4(out)
         out_flatten = out.view(out.shape[0], -1)
-        out = self.final(out_flatten)
+        out = self.final(out_flatten.clone())
         
         return out
 
@@ -69,7 +70,7 @@ class ForceEstimatorVS(nn.Module):
         self.linear1 = FcBlock(30 + rs_size, 84)
         self.linear2 = FcBlock(84, 180)
         self.linear3 = FcBlock(180, 50)
-        self.final = nn.Linear(50, 3)
+        self.final = nn.Linear(50, 6)
     
     def forward(self, x, robot_state=None):
 
@@ -91,11 +92,9 @@ class ForceEstimatorV(nn.Module):
         super(ForceEstimatorV, self).__init__()
 
         self.encoder = ResNet18(in_channels=3, final_features=final_layer)
-        self.final = nn.Linear(30, 3)
 
     def forward(self, x):
         out = self.encoder(x)
-        out = self.final(out)
         return out
 
 

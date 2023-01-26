@@ -85,14 +85,17 @@ class ResBlock2d(nn.Module):
                                padding=padding)
         self.norm1 = BatchNorm2d(out_channels, affine=True)
         self.norm2 = BatchNorm2d(out_channels, affine=True)
+        self.relu1 = nn.ReLU(inplace=False)
+        self.relu2 = nn.ReLU(inplace=False)
+        self.relu_last = nn.ReLU(inplace=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         shortcut = self.shortcut(x)
 
-        out = F.relu(self.norm1(self.conv1(x)))
-        out = F.relu(self.norm2(self.conv2(out)))
-        out += shortcut
-        out = F.relu(out)
+        out = self.relu1(self.norm1(self.conv1(x)))
+        out = self.relu2(self.norm2(self.conv2(out)))
+        out = out.clone() + shortcut
+        out = self.relu_last(out)
         return out
 
 
@@ -104,11 +107,12 @@ class FcBlock(nn.Module):
         super(FcBlock, self).__init__()
         self.linear = nn.Linear(in_features, out_features)
         self.bn = BatchNorm1d(out_features)
+        self.relu = nn.ReLU(inplace=False)
     
     def forward(self, x):
         out = self.linear(x)
         out = self.bn(out)
-        out = F.relu(out)
+        out = self.relu(out)
         return out
 
 

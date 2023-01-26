@@ -36,7 +36,7 @@ class VisionStateDataset(Dataset):
         np.random.seed(seed)
         random.seed(seed)
         self.root = Path(root)
-        scene_list_path = self.root/"train.txt" if is_train else self.root/'val.txt'
+        scene_list_path = self.root/'train.txt' if is_train else self.root/'val.txt'
         self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)]
         self.transform = transform
         self.crawl_folders()
@@ -57,6 +57,7 @@ class VisionStateDataset(Dataset):
                 sample = {}
                 sample['img'] = images[i]
                 sample['label'] = norm_labels[n_labels*i: (n_labels*i) + step]
+                sample['forces'] = labels[n_labels*i:(n_labels*i) + step, -6:]
                 samples.append(sample)
         
         random.shuffle(samples)
@@ -71,7 +72,7 @@ class VisionStateDataset(Dataset):
             img = self.transform([img])
             img = img[0]
         
-        return {'img': img, 'robot_state': label[:, :-6], 'forces': label[:, -6:]}
+        return {'img': img, 'robot_state': label[:, :-6], 'forces': sample['forces']}
     
     def __len__(self):
         return len(self.samples)
