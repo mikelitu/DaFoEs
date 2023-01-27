@@ -143,10 +143,11 @@ class RecurrentCNN(nn.Module):
         self.lstm = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.1)
         self.fc = nn.Linear(hidden_size, num_classes)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, robot_state: torch.Tensor = None) -> torch.Tensor:
         batch_size = x.shape[0]
         x = self.encoder(x)
         x = x.reshape(batch_size, -1, self.embed_dim)
+        print(x.shape)
         #lstm part
         h_0 = torch.autograd.Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))
         c_0 = torch.autograd.Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))

@@ -57,7 +57,7 @@ class VisionStateDataset(Dataset):
                 sample = {}
                 sample['img'] = images[i]
                 sample['label'] = norm_labels[n_labels*i: (n_labels*i) + step]
-                sample['forces'] = labels[n_labels*i:(n_labels*i) + step, -6:]
+                sample['forces'] = 0.1 * labels[n_labels*i:(n_labels*i) + step, -6:]
                 samples.append(sample)
         
         random.shuffle(samples)

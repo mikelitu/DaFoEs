@@ -290,14 +290,14 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vi
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
             vit_pred_forces = vit_predict_force_state(vit_model, img, state, forces, True)
-            vit_loss = mse(vit_pred_forces, forces)
+            vit_loss = (torch.sqrt((forces - vit_pred_forces) ** 2)).mean()
             losses.update([vit_loss.item()])
 
         else:
             state = None
             forces = forces.mean(axis=1)
             vit_pred_forces = vit_predict_force_visu(vit_model, img, True)
-            vit_loss = mse(vit_pred_forces, forces)
+            vit_loss = (torch.sqrt((forces - vit_pred_forces) ** 2)).mean()
             losses.update([vit_loss.item()])
         
         # measure elapsed time
