@@ -42,6 +42,7 @@ parser.add_argument('--pretrained', default=None, metavar='PATH', help='path to 
 parser.add_argument('--name', dest='name', type=str, required=True, help='name of the experiment, checkpoint are stored in checkpoint/name')
 parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='weight for rroot mean square error loss')
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
+parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness'], default='random', type=str, help='training type for comparison')
 
 best_error = -1
 n_iter = 0
@@ -95,8 +96,8 @@ def main():
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.type))
     
-    train_dataset = VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed)
-    val_dataset = VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed)
+    train_dataset = VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type)
+    val_dataset = VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.scenes)))

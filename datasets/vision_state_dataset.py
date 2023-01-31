@@ -32,11 +32,24 @@ class VisionStateDataset(Dataset):
         transform functions takes in a list images and a numpy array representing the intrinsics of the camera and the robot state
     """
 
-    def __init__(self, root, is_train=True, transform=None, seed=0):
+    def __init__(self, root, is_train=True, transform=None, seed=0, train_type="random"):
         np.random.seed(seed)
         random.seed(seed)
         self.root = Path(root)
-        scene_list_path = self.root/'train.txt' if is_train else self.root/'val.txt'
+
+        train_files = {"random": "train.txt", 
+                    "geometry": "train_geometry.txt", 
+                    "color": "train_color.txt", 
+                    "structure": "train_structure.txt",
+                    "stiffness": "train_stiffness.txt"}
+
+        val_files = {"random": "val.txt", 
+                    "geometry": "val_geometry.txt", 
+                    "color": "val_color.txt", 
+                    "structure": "val_structure.txt",
+                    "stiffness": "val_stiffness.txt"}
+
+        scene_list_path = self.root/train_files[train_type] if is_train else self.root/val_files[train_type]
         self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)]
         self.transform = transform
         self.crawl_folders()
