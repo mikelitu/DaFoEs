@@ -276,14 +276,14 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, cn
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
             cnn_pred_forces = cnn_predict_force_state(cnn_model, img, state, forces)
-            cnn_loss = (torch.sqrt((forces - cnn_pred_forces) ** 2)).mean()
+            cnn_loss = torch.sqrt(((forces - cnn_pred_forces) ** 2).mean())
             losses.update([cnn_loss.item()])
 
         else:
             state = None
             forces = forces.mean(axis=1)
             cnn_pred_forces = cnn_predict_force_visu(cnn_model, img)
-            cnn_loss = (torch.sqrt((forces - cnn_pred_forces) ** 2)).mean()
+            cnn_loss = torch.sqrt(((forces - cnn_pred_forces) ** 2).mean())
             losses.update([cnn_loss.item()])
         
         # measure elapsed time
