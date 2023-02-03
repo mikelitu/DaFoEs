@@ -269,7 +269,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vi
         
         n_iter += 1
     
-    return losses.avg[0]
+    return losses.avg[1]
 
 @torch.no_grad()
 def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vit_model: nn.Module, logger: TermLogger, output_writers: SummaryWriter = [], mse = None):

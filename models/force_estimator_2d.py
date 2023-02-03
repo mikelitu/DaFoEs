@@ -4,56 +4,95 @@ from models.utils import ResBlock2d
 from sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 import torch.nn.functional as F
 from models.utils import FcBlock
+import numpy as np
+import torchvision.models as models
+import torch.utils.model_zoo as model_zoo
 
-class ResNet18(nn.Module):
 
-    """
-    Original architecture of the ResNet18 network. "Deep Residual Learning for Image Recognition"
-    by Kaimin He et al. (doi: https://doi.org/10.48550/arXiv.1512.03385)
-    """
+class ResNetMultiImageInput(models.ResNet):
 
-    def __init__(self, in_channels: int = 3, final_features: int = 512):
-        super(ResNet18, self).__init__()
-
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=7, stride=2, padding=3)
-        self.bn1 = BatchNorm2d(64)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+    def __init__(self, block, layers, num_classes=1000, num_input_images=1):
+        super(ResNetMultiImageInput, self).__init__(block, layers)
+        self.inplanes = 64
+        self.conv1 = nn.Conv2d(
+            num_input_images * 3, 64, kernel_size=7, stride=2, padding=3, bias=False
+        )
+        self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=False)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
-        self.layer1 = nn.Sequential(
-            ResBlock2d(in_features=64, kernel_size=3, padding=1, stride=False),
-            ResBlock2d(in_features=64, kernel_size=3, padding=1, stride=False)
-        )
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
-        self.layer2 = nn.Sequential(
-            ResBlock2d(in_features=64, kernel_size=3, padding=1, stride=True, out_channels=128),
-            ResBlock2d(in_features=128, kernel_size=3, padding=1, stride=False)
-        )
+def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1):
+    """Constructs a ResNet model.
 
-        self.layer3 = nn.Sequential(
-            ResBlock2d(in_features=128, kernel_size=3, padding=1, stride=True, out_channels=256),
-            ResBlock2d(in_features=256, kernel_size=3, padding=1, stride=False)
-        )
+    Args:
+        num_layers (int): Number of resnet layers. Must be 18 or 50
+        pretrained (bool, optional): If True, returns a model pre-trained on ImageNet. Defaults to False.
+        num_input_images (int, optional): Number of frames stacked as input. Defaults to 1.
+    """
+    assert num_layers in [18, 50], "Can only run with 18 or 50 layer resnet"
+    blocks = {18: [2, 2, 2, 2], 50: [3, 4, 6, 3]}[num_layers]
+    block_type = {18: models.resnet.BasicBlock, 50: models.resnet.Bottleneck}[num_layers]
+    model = ResNetMultiImageInput(block_type, blocks, num_input_images=num_input_images)
 
-        self.layer4 = nn.Sequential(
-            ResBlock2d(in_features=256, kernel_size=3, padding=1, stride=True, out_channels=512),
-            ResBlock2d(in_features=512, kernel_size=3, padding=1, stride=False)
-        )
+    if pretrained:
+        loaded = model_zoo.load_url(models.resnet.model_urls['resnet{}'.format(num_layers)])
+        loaded['conv1.weight'] = torch.cat(
+            [loaded['conv1.weight']] * num_input_images, 1) / num_input_images
+        model.load_state_dict(loaded)
+    return model
 
-        self.final = nn.Linear(in_features=512*8*8, out_features=final_features)
+
+class ResnetEncoder(nn.Module):
+    """Pytorch module for a resnet encoder
+    """
+    def __init__(self, num_layers, pretrained, num_input_images=1):
+        super(ResnetEncoder, self).__init__()
+
+        self.num_ch_enc = np.array([64, 64, 128, 256, 512])
+
+        resnets = {
+            18: models.resnet18,
+            34: models.resnet34,
+            50: models.resnet50,
+            101: models.resnet101,
+            152: models.resnet152
+        }
+
+        if num_layers not in resnets:
+            raise ValueError("{} is not a valid number of resnet layers".format(num_layers))
         
-    def forward(self, image: torch.Tensor) -> torch.Tensor:
+        if num_input_images > 1:
+            self.encoder = resnet_multiimage_input(num_layers, pretrained, num_input_images)
+        else:
+            self.encoder = resnets[num_layers](pretrained)
         
-        out = self.maxpool(self.bn1(self.conv1(image)))
-        out = self.relu(out)
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out_flatten = out.view(out.shape[0], -1)
-        out = self.final(out_flatten.clone())
+        if num_layers > 34:
+            self.num_ch_enc[1:] *= 4
         
-        return out
+    def forward(self, input_image):
+        x = input_image
+
+        x = self.encoder.conv1(x)
+        x = self.encoder.bn1(x)
+        x = self.encoder.relu(x)
+        x = self.encoder.maxpool(x)
+        x = self.encoder.layer1(x)
+        x = self.encoder.layer2(x)
+        x = self.encoder.layer3(x)
+        x = self.encoder.layer4(x)
+
+        return x
 
 
 class ForceEstimatorVS(nn.Module):
@@ -62,23 +101,26 @@ class ForceEstimatorVS(nn.Module):
     Vision + State network architecture from the following paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
     with Vision and Robot State" by Zonghe Chua et al. (https://doi.org/10.48550/arXiv.2011.02112)
     """
-    def __init__(self, rs_size: int, final_layer: int):
+    def __init__(self, rs_size: int, num_layers: int = 18, pretrained: bool = True):
         super(ForceEstimatorVS, self).__init__()
 
-        self.encoder = ResNet18(in_channels=3, final_features=final_layer)
+        self.encoder = ResnetEncoder(num_layers, pretrained)
 
-        self.linear1 = FcBlock(30 + rs_size, 84)
-        self.linear2 = FcBlock(84, 180)
-        self.linear3 = FcBlock(180, 50)
+        self.linear1 = FcBlock(2048 * 8 * 8, 1000)
+        self.linear2 = FcBlock(1000 + rs_size, 84)
+        self.linear3 = FcBlock(84, 180)
+        self.linear4 = FcBlock(180, 50)
         self.final = nn.Linear(50, 6)
     
     def forward(self, x, robot_state=None):
 
-        out_flatten = self.encoder(x)
-        out = torch.cat([out_flatten, robot_state], dim=1)
-        out = self.linear1(out)
+        out = self.encoder(x)
+        out_flatten = out.view(out.shape[0], -1)
+        out = self.linear1(out_flatten)
+        out = torch.cat([out, robot_state], dim=1)
         out = self.linear2(out)
         out = self.linear3(out)
+        out = self.linear4(out)
         out = self.final(out)
         return out
 
@@ -88,13 +130,20 @@ class ForceEstimatorV(nn.Module):
     Vision only network from the paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
     with Vision and Robot State" by Zonghe Chua et al. (doi: https://doi.org/10.48550/arXiv.2011.02112)
     """
-    def __init__(self, final_layer: int):
+    def __init__(self, num_layers: int = 18, pretrained: bool = True):
         super(ForceEstimatorV, self).__init__()
 
-        self.encoder = ResNet18(in_channels=3, final_features=final_layer)
+        self.encoder = ResnetEncoder(num_layers, pretrained)
+
+        self.linear1 = FcBlock(2048 * 8 * 8, 500)
+        self.final = FcBlock(500, 6)
 
     def forward(self, x):
         out = self.encoder(x)
+        out_flatten = out.view(out.shape[0], -1)
+        out = self.linear1(out_flatten)
+        out = self.final(out)
+
         return out
 
 

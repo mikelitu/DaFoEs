@@ -27,7 +27,6 @@ def load_from_folder(folder: Path, limit: int = 1000):
     folder = Path(folder)
     labels = np.array(pd.read_csv(folder/'labels.csv'))
     norm_labels = normalize_labels(labels)
-    forces = labels[:, -6:]
 
     inputs = []
     nlabels = labels.shape[0] // len(folder.files('*.png'))
@@ -35,7 +34,7 @@ def load_from_folder(folder: Path, limit: int = 1000):
 
     breaking_limit = min(len(folder.files('*.png')) - 40, limit)
 
-    print('Loading a total of {} images'.format(breaking_limit))
+    print('Loading a total of {} images'.format(breaking_limit - 20))
 
     for i, file in enumerate(sorted(folder.files('*.png'))):
         if i == breaking_limit:
@@ -115,7 +114,7 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
     print("LOADING EXPERIMENT [====>]")
     print("Loading test dataset for corresponding model...")
 
-    data_dir = Path('/home/md21local/test_force_visu_data')
+    root_dir = Path('/home/md21local/test_force_visu_data')
 
     test_dirs = {
         'random': 'dragon_20_pink_single-layer_push',
@@ -124,30 +123,36 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
         'stiffness': 'dragon_20_pink_single-layer_push',
         'structure': 'eco_30_red_dragon_20_pink_double-sphere_push'
     }
+
+    share_dir = 'eco_30_pink_single-layer_push'
+
     test_data_dir = test_dirs[train_mode] if include_state else test_dirs['random']
-    data_dir = data_dir/test_data_dir
+    data_dir = root_dir/test_data_dir
     print('Loading data from {}'.format(data_dir))
 
-    data = load_from_folder(data_dir, 600)
+    test_data = load_from_folder(data_dir, 620)
 
-    return model, data
+    print('Loading data from shared dataset {}'.format(root_dir/share_dir))
+    share_data = load_from_folder(root_dir/share_dir, 620)
+
+    return model, test_data, share_data
 
 
 def run_test_experiment(architecture: str, transforms, include_state: bool = True, train_mode: str = "random"):
 
-    predictions = []
-    metrics = []
-    forces = []
+    test_predictions, shared_predictions = [], []
+    test_metrics, shared_metrics = [], []
+    test_forces, shared_forces = [], []
 
     # Loading the necessary data
-    model, data = load_test_experiment(architecture, include_state, train_mode)
+    model, test_data, shared_data = load_test_experiment(architecture, include_state, train_mode)
 
     model.to(torch.device("cuda"))
 
     model.eval()
 
-    for j in tqdm(range(len(data))):
-        d = data[j]
+    for j in tqdm(range(len(test_data))):
+        d = test_data[j]
         img = transforms([d['img']])[0].unsqueeze(0).cuda()
         state = torch.from_numpy(d['state']).unsqueeze(0).float().cuda()
         force = torch.from_numpy(d['force']).unsqueeze(0).float().cuda()
@@ -163,15 +168,43 @@ def run_test_experiment(architecture: str, transforms, include_state: bool = Tru
         
         rmse = torch.sqrt(((force - pred_force) ** 2).mean()) if include_state else torch.sqrt(((force.mean(axis=1) - pred_force) ** 2).mean())
 
-        metrics.append(rmse.item())
-        forces.append([f for f in force.squeeze(0).detach().cpu().numpy()])
-        predictions.append([f for f in pred_force.squeeze(0).detach().cpu().numpy()] if include_state else pred_force.squeeze(0).detach().cpu().numpy())
+        test_metrics.append(rmse.item())
+        test_forces.append([f for f in force.squeeze(0).detach().cpu().numpy()])
+        test_predictions.append([f for f in pred_force.squeeze(0).detach().cpu().numpy()] if include_state else pred_force.squeeze(0).detach().cpu().numpy())
     
-    metrics = np.array(metrics)
-    forces = np.array(forces).reshape(-1, 6) if include_state else np.array(forces).mean(axis=0)
-    predictions = np.array(predictions).reshape(-1, 6) if include_state else np.array(predictions)
+    test_metrics = np.array(test_metrics)
+    test_forces = np.array(test_forces).reshape(-1, 6) if include_state else np.array(test_forces).mean(axis=0)
+    test_predictions = np.array(test_predictions).reshape(-1, 6) if include_state else np.array(test_predictions)
 
-    results = {'rmse': metrics, 'gt': forces, 'pred': predictions}
+
+    for j in tqdm(range(len(shared_data))):
+        d = shared_data[j]
+        img = transforms([d['img']])[0].unsqueeze(0).cuda()
+        state = torch.from_numpy(d['state']).unsqueeze(0).float().cuda()
+        force = torch.from_numpy(d['force']).unsqueeze(0).float().cuda()
+
+        if architecture.lower() == "vit" and include_state:
+            pred_force = vit_predict_force_state(model, img, state, force)
+        elif architecture.lower() == 'vit' and not include_state:
+            pred_force = vit_predict_force_visu(model, img)
+        elif architecture.lower() == 'cnn' and include_state:
+            pred_force = cnn_predict_force_state(model, img, state, force)
+        elif architecture.lower() == 'cnn' and not include_state:
+            pred_force = cnn_predict_force_visu(model, img)
+        
+        rmse = torch.sqrt(((force - pred_force) ** 2).mean()) if include_state else torch.sqrt(((force.mean(axis=1) - pred_force) ** 2).mean())
+
+        shared_metrics.append(rmse.item())
+        shared_forces.append([f for f in force.squeeze(0).detach().cpu().numpy()])
+        shared_predictions.append([f for f in pred_force.squeeze(0).detach().cpu().numpy()] if include_state else pred_force.squeeze(0).detach().cpu().numpy())
+    
+    shared_metrics = np.array(shared_metrics)
+    shared_forces = np.array(shared_forces).reshape(-1, 6) if include_state else np.array(shared_forces).mean(axis=0)
+    shared_predictions = np.array(shared_predictions).reshape(-1, 6) if include_state else np.array(shared_predictions)
+
+
+    results = {'test_rmse': test_metrics, 'test_gt': test_forces, 'test_pred': test_predictions,
+               'shared_rmse': shared_metrics, 'shared_gt': shared_forces, 'shared_pred': shared_predictions}
 
     return results
 

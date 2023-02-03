@@ -43,6 +43,7 @@ parser.add_argument('--name', dest='name', type=str, required=True, help='name o
 parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='weight for rroot mean square error loss')
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness'], default='random', type=str, help='training type for comparison')
+parser.add_argument('--num-layers', choices=[18, 50], default=50, help='number of resnet layers')
 
 best_error = -1
 n_iter = 0
@@ -110,14 +111,14 @@ def main():
     )
 
     # Create the model
-    
+    pretrained = True
 
     if args.type == "v":
         include_state = False
-        cnn_model = ForceEstimatorV(final_layer=6)
+        cnn_model = ForceEstimatorV(num_layers=args.num_layers, pretrained=pretrained)
     else:
         include_state = True
-        cnn_model = ForceEstimatorVS(rs_size=25, final_layer=30)
+        cnn_model = ForceEstimatorVS(rs_size=25, num_layers=args.num_layers, pretrained=pretrained)
 
     print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
 
@@ -255,7 +256,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cn
         
         n_iter += 1
     
-    return losses.avg[0]
+    return losses.avg[1]
 
 @torch.no_grad()
 def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, cnn_model: nn.Module, logger: TermLogger, output_writers: SummaryWriter = [], mse = None):
