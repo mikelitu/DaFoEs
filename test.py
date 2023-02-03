@@ -93,7 +93,7 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
         print("LOADING EXPERIMENT [==>  ]")
         vit_checkpoints = checkpoints_root/'vit/{}'.format(checkpoints_dir[train_mode] if include_state else 'visu')
         print('The checkpoints are loaded from: {}'.format(sorted(vit_checkpoints.dirs())[-1]))   
-        checkpoint_dir = sorted(vit_checkpoints.dirs())[-1]/'model_best.pth.tar'
+        checkpoint_dir = sorted(vit_checkpoints.dirs())[-1]/'checkpoint.pth.tar'
     
     else:
         print("LOADING EXPERIMENT [=>   ]")
@@ -105,7 +105,7 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
         print("LOADING EXPERIMENT [==>  ]")
         cnn_checkpoints = checkpoints_root/'vit/{}'.format(checkpoints_dir[train_mode] if include_state else 'visu')
         print('The checkpoints are loaded from: {}'.format(sorted(cnn_checkpoints.dirs())[-1]))   
-        checkpoint_dir = sorted(cnn_checkpoints.dirs())[-1]/'model_best.pth.tar'
+        checkpoint_dir = sorted(cnn_checkpoints.dirs())[-1]/'checkpoint.pth.tar'
 
     print("LOADING EXPERIMENT [===> ]")
     print("Loading weights...")
