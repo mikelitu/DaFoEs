@@ -16,6 +16,7 @@ from tensorboardX import SummaryWriter
 from path import Path
 from logger import TermLogger, AverageMeter
 from models.force_estimator_transformers import ViT
+from models.force_estimator_transformers_base import BaseViT
 from models.force_estimator_2d import ForceEstimatorV, ForceEstimatorVS, RecurrentCNN
 from models.recorder import Recorder
 from datasets.vision_state_dataset import VisionStateDataset
@@ -26,7 +27,7 @@ parser = argparse.ArgumentParser(description='Vision and roboto state based forc
 parser.add_argument('data', metavar='DIR', help='path to dataset')
 parser.add_argument('--type', default='vs', choices=['v', 'vs'], type=str, help='model type it can be vision only (v) or vision and state (vs)')
 parser.add_argument('--patch-size', default=32, type=int, metavar='N', help='size of the patches fed into the transformer')
-parser.add_argument('--token-sampling', default=(256, 128, 64, 32, 16, 8), type=tuple, help='sampled token size')
+parser.add_argument('--token-sampling', action='store_true', help='sampled token size')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float, metavar='LR', help='initial learning rate')
@@ -46,6 +47,7 @@ parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'str
 
 best_error = -1
 n_iter = 0
+num_samples = 1500
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -56,7 +58,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/vit'/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/vit-base'/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -119,19 +121,35 @@ def main():
 
     print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
 
-    vit_model = ViT(
-            image_size = 256,
-            patch_size = args.patch_size,
-            num_classes = 6,
-            dim = 1024,
-            depth = 6,
-            heads = 16,
-            mlp_dim = 2048,
-            dropout = 0.1,
-            emb_dropout = 0.1,
-            max_tokens_per_depth=args.token_sampling,
-            state_include = include_state
-    )
+    if args.token_sampling:
+        vit_model = ViT(
+                image_size = 256,
+                patch_size = args.patch_size,
+                num_classes = 6,
+                dim = 1024,
+                depth = 6,
+                heads = 16,
+                mlp_dim = 2048,
+                dropout = 0.1,
+                emb_dropout = 0.1,
+                max_tokens_per_depth=(256, 128, 64, 32, 16, 8),
+                state_include = include_state
+        )
+    
+    else:
+
+        vit_model = BaseViT(
+                image_size = 256,
+                patch_size = args.patch_size,
+                num_classes = 6,
+                dim = 1024,
+                depth = 6,
+                heads = 16,
+                mlp_dim = 2048,
+                dropout = 0.1,
+                emb_dropout = 0.1,
+                state_include = include_state
+        )
 
     vit_model.to(device)
 
@@ -212,6 +230,8 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vi
     logger.train_bar.update(0)
 
     for i, data in enumerate(train_loader):
+        if i > num_samples:
+            break
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
         img = data['img'].to(device)

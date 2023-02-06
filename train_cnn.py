@@ -44,9 +44,11 @@ parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='w
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness'], default='random', type=str, help='training type for comparison')
 parser.add_argument('--num-layers', choices=[18, 50], default=50, help='number of resnet layers')
+parser.add_argument('--att-type', default=None, help='add attention blocks to the CNN')
 
 best_error = -1
 n_iter = 0
+num_samples = 1500
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -57,7 +59,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/cnn'/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/cnn-bam'/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -111,14 +113,14 @@ def main():
     )
 
     # Create the model
-    pretrained = True
+    pretrained = False
 
     if args.type == "v":
         include_state = False
-        cnn_model = ForceEstimatorV(num_layers=args.num_layers, pretrained=pretrained)
+        cnn_model = ForceEstimatorV(num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type)
     else:
         include_state = True
-        cnn_model = ForceEstimatorVS(rs_size=25, num_layers=args.num_layers, pretrained=pretrained)
+        cnn_model = ForceEstimatorVS(rs_size=25, num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type)
 
     print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
 
@@ -201,6 +203,8 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cn
     logger.train_bar.update(0)
 
     for i, data in enumerate(train_loader):
+        if i > num_samples:
+            break
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
         img = data['img'].to(device)

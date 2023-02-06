@@ -96,13 +96,13 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
     
     else:
         print("LOADING EXPERIMENT [=>   ]")
-        print("Chosen model is ResNet18 (CNN) {}".format("vision+state" if include_state else "vision only"))
+        print("Chosen model is ResNet50 (CNN) {}".format("vision+state" if include_state else "vision only"))
         # Choosing the model
-        model = ForceEstimatorVS(rs_size=25, final_layer=30) if include_state else ForceEstimatorV(final_layer=6)
+        model = ForceEstimatorVS(rs_size=25, num_layers=50, pretrained=False) if include_state else ForceEstimatorV(num_layers=50, pretrained=False)
 
         # Find the corresponding checkpoint
         print("LOADING EXPERIMENT [==>  ]")
-        cnn_checkpoints = checkpoints_root/'vit/{}'.format(checkpoints_dir[train_mode] if include_state else 'visu')
+        cnn_checkpoints = checkpoints_root/'cnn/{}'.format(checkpoints_dir[train_mode] if include_state else 'visu')
         print('The checkpoints are loaded from: {}'.format(sorted(cnn_checkpoints.dirs())[-1]))   
         checkpoint_dir = sorted(cnn_checkpoints.dirs())[-1]/'checkpoint.pth.tar'
 
