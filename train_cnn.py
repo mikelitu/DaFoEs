@@ -48,7 +48,7 @@ parser.add_argument('--att-type', default=None, help='add attention blocks to th
 
 best_error = -1
 n_iter = 0
-num_samples = 1000
+num_samples = 200
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -59,7 +59,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/cnn-bam'/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/{}'.format('cnn-bam' if args.att_type is not None else 'cnn')/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 

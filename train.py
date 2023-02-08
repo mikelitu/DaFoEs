@@ -47,7 +47,7 @@ parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'str
 
 best_error = -1
 n_iter = 0
-num_samples = 1000
+num_samples = 200
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -58,7 +58,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/vit-base'/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/{}'.format('vit' if args.token_sampling else 'vit-base')/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
