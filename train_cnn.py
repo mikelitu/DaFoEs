@@ -48,7 +48,7 @@ parser.add_argument('--att-type', default=None, help='add attention blocks to th
 
 best_error = -1
 n_iter = 0
-num_samples = 200
+num_samples = 150
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
