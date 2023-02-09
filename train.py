@@ -96,7 +96,7 @@ def main():
     ])
     
     print("=> Getting scenes from '{}'".format(args.data))
-    print("=> Choosing the correct dataset for choice {}...".format(args.type))
+    print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
     train_dataset = VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type)
     val_dataset = VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type)

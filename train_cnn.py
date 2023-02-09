@@ -97,7 +97,7 @@ def main():
     ])
     
     print("=> Getting scenes from '{}'".format(args.data))
-    print("=> Choosing the correct dataset for choice {}...".format(args.type))
+    print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
     train_dataset = VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type)
     val_dataset = VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type)
@@ -203,8 +203,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cn
     logger.train_bar.update(0)
 
     for i, data in enumerate(train_loader):
-        if i > num_samples:
-            break
+        if i > num_samples: break
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
         img = data['img'].to(device)

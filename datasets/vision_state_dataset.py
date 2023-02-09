@@ -93,7 +93,3 @@ class VisionStateDataset(Dataset):
     
     def __len__(self):
         return len(self.samples)
-
-if __name__ == "__main__":
-    root = Path('/home/md21local/visu_haptic_data')
-    dataset = VisionStateDataset(root)
