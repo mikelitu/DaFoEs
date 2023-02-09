@@ -2,6 +2,7 @@ import torch
 from datasets.augmentations import Compose, CentreCrop, SquareResize, Normalize, ArrayToTensor
 from models.force_estimator_2d import ForceEstimatorV, ForceEstimatorVS
 from models.force_estimator_transformers import ViT
+from models.force_estimator_transformers_base import BaseViT
 from path import Path
 from datasets.vision_state_dataset import normalize_labels, load_as_float
 import numpy as np
@@ -55,8 +56,8 @@ def load_from_folder(folder: Path, limit: int = 1000):
 
 
 def load_test_experiment(architecture: str, include_state: bool = True,  train_mode: str = "random"):
-    train_modes = ["random", "color", "geometry", "structure", "stiffness"]
-    assert architecture.lower() in ["vit", "cnn"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
+    train_modes = ["random", "color", "geometry", "structure", "stiffness", "position"]
+    assert architecture.lower() in ["vit", "cnn", "vit-base", "cnn-bam"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
     assert train_mode in train_modes, "'{}' is not an available training mode. The available training mode are: {}".format(train_mode, train_modes)
     
     checkpoints_root = Path('/home/md21local/mreyzabal/checkpoints/img2force')
@@ -65,7 +66,8 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
         'color': 'visu_state_color',
         'geometry': 'visu_state_geometry',
         'structure': 'visu_state_structure',
-        'stiffness': 'visu_state_stiffness'
+        'stiffness': 'visu_state_stiffness',
+        'position': 'visu_state_position'
     }
     
     print("Experiment variables: architecture -> {}, include_state -> {} & train_mode -> {}".format(architecture, include_state, train_mode))
@@ -87,25 +89,41 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
             max_tokens_per_depth = (256, 128, 64, 32, 16, 8),
             state_include = include_state
         )
-        
-        # Find the corresponding checkpoint
-        print("LOADING EXPERIMENT [==>  ]")
-        vit_checkpoints = checkpoints_root/'vit/{}'.format(checkpoints_dir[train_mode] if include_state else 'visu')
-        print('The checkpoints are loaded from: {}'.format(sorted(vit_checkpoints.dirs())[-1]))   
-        checkpoint_dir = sorted(vit_checkpoints.dirs())[-1]/'checkpoint.pth.tar'
     
+    elif architecture.lower() == 'vit-base':
+        print("LOADING EXPERIMENT [=>   ]")
+        print("Chosen model is Vision Transformer (ViT) {}".format("vision+state" if include_state else "vision only"))
+        model = BaseViT(
+            image_size = 256,
+            patch_size = 16,
+            num_classes = 6,
+            dim = 1024,
+            depth = 6,
+            heads = 16,
+            mlp_dim = 2048,
+            dropout = 0.1,
+            emb_dropout = 0.1,
+            state_include = include_state
+        )
+
+    elif architecture.lower() == 'cnn-bam':
+        print("LOADING EXPERIMENT [=>   ]")
+        print("Chosen model is ResNet50 (CNN) {}".format("vision+state" if include_state else "vision only"))
+        # Choosing the model
+        model = ForceEstimatorVS(rs_size=25, num_layers=50, pretrained=False, att_type='BAM') if include_state else ForceEstimatorV(num_layers=50, pretrained=False, att_type='BAM')
+
     else:
         print("LOADING EXPERIMENT [=>   ]")
         print("Chosen model is ResNet50 (CNN) {}".format("vision+state" if include_state else "vision only"))
         # Choosing the model
         model = ForceEstimatorVS(rs_size=25, num_layers=50, pretrained=False) if include_state else ForceEstimatorV(num_layers=50, pretrained=False)
 
-        # Find the corresponding checkpoint
-        print("LOADING EXPERIMENT [==>  ]")
-        cnn_checkpoints = checkpoints_root/'cnn/{}'.format(checkpoints_dir[train_mode] if include_state else 'visu')
-        print('The checkpoints are loaded from: {}'.format(sorted(cnn_checkpoints.dirs())[-1]))   
-        checkpoint_dir = sorted(cnn_checkpoints.dirs())[-1]/'checkpoint.pth.tar'
 
+    # Find the corresponding checkpoint
+    print("LOADING EXPERIMENT [==>  ]")
+    checkpoints = checkpoints_root/'{}/{}'.format(architecture, checkpoints_dir[train_mode] if include_state else 'visu')
+    print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
+    checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
     print("LOADING EXPERIMENT [===> ]")
     print("Loading weights...")
     checkpoint = torch.load(checkpoint_dir)
@@ -114,17 +132,18 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
     print("LOADING EXPERIMENT [====>]")
     print("Loading test dataset for corresponding model...")
 
-    root_dir = Path('/home/md21local/test_force_visu_data')
+    root_dir = Path('/home/md21local/visu_haptic_data')
 
     test_dirs = {
-        'random': 'dragon_20_pink_single-layer_push',
-        'color': 'eco_30_red_single-layer_push',
-        'geometry': 'eco_30_pink_sphere_push',
-        'stiffness': 'dragon_20_pink_single-layer_push',
-        'structure': 'eco_30_red_dragon_20_pink_double-sphere_push'
+        'random': 'D_P_S_P_R2',
+        'color': 'DE_P_D_R_L1',
+        'geometry': 'D_S_S_P_L2',
+        'stiffness': 'D_P_S_R_R1',
+        'structure': 'ED_P_D_R_C',
+        'position': 'E_S_S_R_R2'
     }
 
-    share_dir = 'eco_30_pink_single-layer_push'
+    share_dir = 'E_P_S_P_C'
 
     test_data_dir = test_dirs[train_mode] if include_state else test_dirs['random']
     data_dir = root_dir/test_data_dir
@@ -157,13 +176,13 @@ def run_test_experiment(architecture: str, transforms, include_state: bool = Tru
         state = torch.from_numpy(d['state']).unsqueeze(0).float().cuda()
         force = torch.from_numpy(d['force']).unsqueeze(0).float().cuda()
 
-        if architecture.lower() == "vit" and include_state:
+        if architecture.lower() in ["vit", 'vit-base'] and include_state:
             pred_force = vit_predict_force_state(model, img, state, force)
-        elif architecture.lower() == 'vit' and not include_state:
+        elif architecture.lower() in ['vit', 'vit-base'] and not include_state:
             pred_force = vit_predict_force_visu(model, img)
-        elif architecture.lower() == 'cnn' and include_state:
+        elif architecture.lower() in ['cnn', 'cnn-bam'] and include_state:
             pred_force = cnn_predict_force_state(model, img, state, force)
-        elif architecture.lower() == 'cnn' and not include_state:
+        elif architecture.lower() in ['cnn', 'cnn-bam'] and not include_state:
             pred_force = cnn_predict_force_visu(model, img)
         
         rmse = torch.sqrt(((force - pred_force) ** 2).mean()) if include_state else torch.sqrt(((force.mean(axis=1) - pred_force) ** 2).mean())
@@ -183,13 +202,13 @@ def run_test_experiment(architecture: str, transforms, include_state: bool = Tru
         state = torch.from_numpy(d['state']).unsqueeze(0).float().cuda()
         force = torch.from_numpy(d['force']).unsqueeze(0).float().cuda()
 
-        if architecture.lower() == "vit" and include_state:
+        if architecture.lower() in ["vit", 'vit-base'] and include_state:
             pred_force = vit_predict_force_state(model, img, state, force)
-        elif architecture.lower() == 'vit' and not include_state:
+        elif architecture.lower() in ['vit', 'vit-base'] and not include_state:
             pred_force = vit_predict_force_visu(model, img)
-        elif architecture.lower() == 'cnn' and include_state:
+        elif architecture.lower() in ['cnn', 'cnn-bam'] and include_state:
             pred_force = cnn_predict_force_state(model, img, state, force)
-        elif architecture.lower() == 'cnn' and not include_state:
+        elif architecture.lower() in ['cnn', 'cnn-bam'] and not include_state:
             pred_force = cnn_predict_force_visu(model, img)
         
         rmse = torch.sqrt(((force - pred_force) ** 2).mean()) if include_state else torch.sqrt(((force.mean(axis=1) - pred_force) ** 2).mean())

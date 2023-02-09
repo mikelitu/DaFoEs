@@ -42,7 +42,7 @@ parser.add_argument('--pretrained', default=None, metavar='PATH', help='path to 
 parser.add_argument('--name', dest='name', type=str, required=True, help='name of the experiment, checkpoint are stored in checkpoint/name')
 parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='weight for rroot mean square error loss')
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
-parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness'], default='random', type=str, help='training type for comparison')
+parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness', 'position'], default='random', type=str, help='training type for comparison')
 parser.add_argument('--num-layers', choices=[18, 50], default=50, help='number of resnet layers')
 parser.add_argument('--att-type', default=None, help='add attention blocks to the CNN')
 

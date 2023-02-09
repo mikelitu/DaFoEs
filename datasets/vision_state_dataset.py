@@ -41,13 +41,15 @@ class VisionStateDataset(Dataset):
                     "geometry": "train_geometry.txt", 
                     "color": "train_color.txt", 
                     "structure": "train_structure.txt",
-                    "stiffness": "train_stiffness.txt"}
+                    "stiffness": "train_stiffness.txt",
+                    "position": "train_position.txt"}
 
         val_files = {"random": "val.txt", 
                     "geometry": "val_geometry.txt", 
                     "color": "val_color.txt", 
                     "structure": "val_structure.txt",
-                    "stiffness": "val_stiffness.txt"}
+                    "stiffness": "val_stiffness.txt",
+                    "position": "val_position.txt"}
 
         scene_list_path = self.root/train_files[train_type] if is_train else self.root/val_files[train_type]
         self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)]
@@ -67,10 +69,12 @@ class VisionStateDataset(Dataset):
             step = 7
 
             for i in range(len(images)):
+                if i < 25: continue
+                if i > len(images) - 25: break
                 sample = {}
                 sample['img'] = images[i]
                 sample['label'] = norm_labels[n_labels*i: (n_labels*i) + step]
-                sample['forces'] = 0.1 * labels[n_labels*i:(n_labels*i) + step, -6:]
+                sample['forces'] = 0.25 * labels[n_labels*i:(n_labels*i) + step, -6:]
                 samples.append(sample)
         
         random.shuffle(samples)
@@ -89,3 +93,7 @@ class VisionStateDataset(Dataset):
     
     def __len__(self):
         return len(self.samples)
+
+if __name__ == "__main__":
+    root = Path('/home/md21local/visu_haptic_data')
+    dataset = VisionStateDataset(root)
