@@ -11,7 +11,7 @@ import time
 import csv
 import numpy as np
 from datasets import augmentations
-from utils import save_checkpoint, load_checkpoint
+from utils import save_checkpoint
 from tensorboardX import SummaryWriter
 from path import Path
 from logger import TermLogger, AverageMeter
@@ -57,7 +57,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/{}'.format('vit_dist')/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/{}'.format('vit-dist')/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -77,14 +77,15 @@ def main():
     normalize = augmentations.Normalize(mean = [0.45, 0.45, 0.45],
                                         std = [0.225, 0.225, 0.225])
     
-    noise = augmentations.GaussianNoise(noise_factor = 0.25)
+    # noise = augmentations.GaussianNoise(noise_factor = 0.25)
 
     train_transform = augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
+        augmentations.RandomScaleCrop(),
         augmentations.ArrayToTensor(),
         normalize,
-        noise
+        # noise
     ])
 
     val_transform = augmentations.Compose([
@@ -118,16 +119,15 @@ def main():
     else:
         include_state = True
 
-    print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
+    print("=> Creating the {} teacher and the student for distillation training...".format("vision & state" if include_state else "vision"))
 
     teacher = ForceEstimatorVS(rs_size=25, num_layers=50, pretrained=False) if include_state else ForceEstimatorV(num_layers=50, pretrained=False)
     checkpoint_rootdir = Path('/nfs/home/mreyzabal/checkpoints/img2force/cnn/{}'.format(args.name))
     checkpoint_dir = checkpoint_rootdir.dirs()[-1]
-    teacher = load_checkpoint(checkpoint_dir, teacher)
-
+    checkpoints = torch.load(checkpoint_dir/'checkpoint.pth.tar')
+    teacher.load_state_dict(checkpoints['state_dict'], strict=True)
     teacher.to(device)
-    
-    
+
     vit_model = DistillableViT(
                 image_size = 256,
                 patch_size = args.patch_size,
@@ -151,6 +151,7 @@ def main():
         hard = False
     )
 
+    distiller.to(device)
 
     #Load parameters
     if args.pretrained:
@@ -159,7 +160,7 @@ def main():
         vit_model.load_state_dict(weights_vit['state_dict'], strict=False)
     
     print("=> Setting Adam optimizer")
-    vit_optimizer = torch.optim.Adam(vit_model.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
+    vit_optimizer = torch.optim.Adam(distiller.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
     
 
     with open(args.save_path/args.log_summary, 'w') as csvfile:
@@ -202,7 +203,7 @@ def main():
         save_checkpoint(
             args.save_path, {
                 'epoch': epoch + 1,
-                'state_dict': vit_model.state_dict(),
+                'state_dict': vit_model.to_vit().state_dict(),
             },
             is_best)
         
@@ -282,7 +283,7 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vi
     log_outputs = len(output_writers) > 0
 
     #switch to evaluate mode
-    vit_model = vit_model.to_vit()
+    vit_model = vit_model.to_vit().to(device)
     vit_model.eval()
 
     end = time.time()

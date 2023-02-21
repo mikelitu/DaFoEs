@@ -3,7 +3,7 @@ from models.recorder import BamRecorderV, BamRecorderVS, SampRecorder, Recorder
 from models.force_estimator_2d import ForceEstimatorV, ForceEstimatorVS
 from models.force_estimator_transformers import ViT
 from models.force_estimator_transformers_base import BaseViT
-from datasets.augmentations import CentreCrop, SquareResize, Normalize, ArrayToTensor, Compose
+from datasets.augmentations import CentreCrop, SquareResize, Normalize, ArrayToTensor, Compose, GaussianNoise
 from datasets.vision_state_dataset import normalize_labels, load_as_float
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -49,29 +49,48 @@ models = {
         state_include = include_state
     ),
 
+    'vit-dist': BaseViT(
+        image_size = 256,
+        patch_size = 16,
+        num_classes = 6,
+        dim = 1024,
+        depth = 6,
+        heads = 16,
+        mlp_dim = 2048,
+        dropout = 0.1,
+        emb_dropout = 0.1,
+        state_include = include_state
+    ),
+
+
     'cnn-bam': 
     ForceEstimatorVS(num_layers=50, pretrained=False, att_type='BAM', rs_size=25) if include_state else ForceEstimatorV(num_layers=50, pretrained=False, att_type='BAM')
 }
 
 #Recorders
 
-recorders = {'vit': SampRecorder, 'vit-base': Recorder, 'cnn-bam': BamRecorderVS if include_state else BamRecorderV}
+recorders = {'vit': SampRecorder, 'vit-base': Recorder, 'vit-dist': Recorder, 'cnn-bam': BamRecorderVS if include_state else BamRecorderV}
 
 def plot_attention(attns: torch.Tensor):
 
     # attns -> (batch x layers x heads x patch x patch)
     if not isinstance(attns, list):
         attns = attns.squeeze(0).cpu().numpy()
+    
+    for i, attention in enumerate(attns):
+        if i == 0:
+            n = int(np.sqrt(attention.shape[0]))
+            
+            fig = plt.figure(figsize=(1920/100, 1080/100), dpi=100)
+            for a in range(attention.shape[0]):
+                plt.subplot(n, n, a+1)
+                ax = sns.heatmap(attention[a].tolist(),
+                                vmin=attention[a].min(),
+                                vmax=attention[a].max(),
+                                cmap='Reds', cbar=False)
+                plt.axis("off")
 
-    for attention in attns:
-        attention = attention.mean(axis=0)
-        print(attention[1:, 1:].max(), attention[1:, 1:].min())
-        ax = sns.heatmap(attention.tolist(),
-                        vmin=attention[1:, 1:].max(),
-                        vmax=attention[1:, 1:].min(),
-                        cmap='Reds')
-        plt.show()
-
+            plt.show()
 
 
 def main():
@@ -90,20 +109,23 @@ def main():
         std = [0.225, 0.225, 0.225]
     )
 
+    noise = GaussianNoise(noise_factor=0.3)
+
     transforms = Compose([
         CentreCrop(),
         SquareResize(),
         ArrayToTensor(),
-        normalize
+        normalize,
+        noise
     ])
 
     img = transforms([img])[0]
 
-    
+    imageio.imsave('test.png', img.permute(1, 2, 0).numpy().astype(np.uint8))
     model = models[model_name]
 
     model.eval()
-    root_checkpoint_dir = Path('/home/md21local/mreyzabal/checkpoints/img2force/{}/{}_{}'.format(model_name, "visu_state" if include_state else "visu", feature))
+    root_checkpoint_dir = Path('/home/md21local/mreyzabal/checkpoints/old_img2force/{}/{}_{}'.format(model_name, "visu_state" if include_state else "visu", feature))
     checkpoint_dir = root_checkpoint_dir.dirs()[-1]
     checkpoints = torch.load(checkpoint_dir/'checkpoint.pth.tar')
     model.load_state_dict(checkpoints['state_dict'], strict=True)

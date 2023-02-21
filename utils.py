@@ -13,10 +13,6 @@ def save_checkpoint(save_path: Path, model_state, is_best:bool, filename='checkp
         shutil.copyfile(save_path/'{}'.format(filename),
                         save_path/'model_best.pth.tar')
 
-def load_checkpoint(load_path: Path, model: nn.Module) -> nn.Module:
-    checkpoint = torch.load(load_path/'checkpoint.pth.tar')
-    return model.load_state_dict(checkpoint['state_dict'])
-
 def dtw(s, t):
     n, m = len(s), len(t)
     dtw_matrix = np.zeros((n+1, m+1))

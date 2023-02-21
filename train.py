@@ -78,14 +78,15 @@ def main():
     normalize = augmentations.Normalize(mean = [0.45, 0.45, 0.45],
                                         std = [0.225, 0.225, 0.225])
     
-    noise = augmentations.GaussianNoise(noise_factor = 0.25)
+    # noise = augmentations.GaussianNoise(noise_factor = 0.25)
 
     train_transform = augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
+        augmentations.RandomScaleCrop(),
         augmentations.ArrayToTensor(),
         normalize,
-        noise
+        # noise
     ])
 
     val_transform = augmentations.Compose([

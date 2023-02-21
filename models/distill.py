@@ -35,7 +35,7 @@ class DistillMixin:
         x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
 
         x = self.to_latent(x)
-        
+
         if rs is not None:
             x = torch.cat((x, rs.squeeze(1)), dim=1)
 
@@ -103,7 +103,10 @@ class DistillWrapper(nn.Module):
         T = temperature if exists(temperature) else self.temperature
 
         with torch.no_grad():
-            teacher_logits = self.teacher(img, robot_state)
+            if robot_state is not None:
+                teacher_logits = self.teacher(img, robot_state.squeeze(1))
+            else:
+                teacher_logits = self.teacher(img)
 
         student_logits, distill_tokens = self.student(img, None, robot_state, distill_token = self.distillation_token, **kwargs)
         distill_logits = self.distill_mlp(distill_tokens)
