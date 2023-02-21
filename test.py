@@ -14,12 +14,14 @@ from train import vit_predict_force_state, vit_predict_force_visu
 from train_cnn import cnn_predict_force_state, cnn_predict_force_visu
 import pickle
 import os
+from utils import dtw, frdist
 
 parser = argparse.ArgumentParser(description="Script to test the different models for ForceEstimation variability",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("--architecture", choices=['cnn', 'vit'], default='vit', help='The chosen architecture to test')
+parser.add_argument("--architecture", choices=['cnn', 'vit', 'cnn-bam', 'vit-base'], default='vit', help='The chosen architecture to test')
 parser.add_argument("--state", action='store_true', help='Include the state')
 parser.add_argument("--train-type", type=str, default='random', help='The training type of the chosen model')
+parser.add_argument("--data-dir", type=str, help="Directory of the data")
 parser.add_argument("--save-dir", default='results', type=str, help='Save directory for the metrics and predictions')
 parser.add_argument("--save", action='store_true', help='Save metrics and predictions for further analysis')
 
@@ -49,7 +51,7 @@ def load_from_folder(folder: Path, limit: int = 1000):
         force = labels[i*nlabels:(i*nlabels) + step, -6:]
         data['img'] = img
         data['state'] = state
-        data['force'] = 0.1 * force
+        data['force'] = 0.25 * force
         inputs.append(data)
     
     return inputs
@@ -60,21 +62,13 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
     assert architecture.lower() in ["vit", "cnn", "vit-base", "cnn-bam"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
     assert train_mode in train_modes, "'{}' is not an available training mode. The available training mode are: {}".format(train_mode, train_modes)
     
-    checkpoints_root = Path('/home/md21local/mreyzabal/checkpoints/img2force')
-    checkpoints_dir = {
-        'random': 'visu_state',
-        'color': 'visu_state_color',
-        'geometry': 'visu_state_geometry',
-        'structure': 'visu_state_structure',
-        'stiffness': 'visu_state_stiffness',
-        'position': 'visu_state_position'
-    }
+    
     
     print("Experiment variables: architecture -> {}, include_state -> {} & train_mode -> {}".format(architecture, include_state, train_mode))
 
     if architecture.lower() == "vit":
         print("LOADING EXPERIMENT [=>   ]")
-        print("Chosen model is Vision Transformer (ViT) {}".format("vision+state" if include_state else "vision only"))
+        print("Chosen model is Vision Transformer (ViT) with token sampling {}".format("vision+state" if include_state else "vision only"))
         # Choosing the model
         model = ViT(
             image_size = 256,
@@ -121,22 +115,23 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
 
     # Find the corresponding checkpoint
     print("LOADING EXPERIMENT [==>  ]")
-    checkpoints = checkpoints_root/'{}/{}'.format(architecture, checkpoints_dir[train_mode] if include_state else 'visu')
+    checkpoints_root = Path('/nfs/home/mreyzabal/checkpoints/img2force')
+    checkpoints = checkpoints_root/"{}/{}_{}".format(architecture, "visu_state" if include_state else "visu", train_mode)
     print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
     checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
     print("LOADING EXPERIMENT [===> ]")
     print("Loading weights...")
     checkpoint = torch.load(checkpoint_dir)
-    model.load_state_dict(checkpoint['state_dict'], strict=False)
+    model.load_state_dict(checkpoint['state_dict'], strict=True)
 
     print("LOADING EXPERIMENT [====>]")
     print("Loading test dataset for corresponding model...")
 
-    root_dir = Path('/home/md21local/visu_haptic_data')
+    root_dir = Path('/nfs/home/mreyzabal/visu_haptic_data')
 
     test_dirs = {
-        'random': 'D_P_S_P_R2',
-        'color': 'DE_P_D_R_L1',
+        'random': 'DE_P_D_P_R2',
+        'color': 'EE_P_D_R_L1',
         'geometry': 'D_S_S_P_L2',
         'stiffness': 'D_P_S_R_R1',
         'structure': 'ED_P_D_R_C',
@@ -145,7 +140,7 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
 
     share_dir = 'E_P_S_P_C'
 
-    test_data_dir = test_dirs[train_mode] if include_state else test_dirs['random']
+    test_data_dir = test_dirs[train_mode]
     data_dir = root_dir/test_data_dir
     print('Loading data from {}'.format(data_dir))
 
@@ -176,7 +171,7 @@ def run_test_experiment(architecture: str, transforms, include_state: bool = Tru
         state = torch.from_numpy(d['state']).unsqueeze(0).float().cuda()
         force = torch.from_numpy(d['force']).unsqueeze(0).float().cuda()
 
-        if architecture.lower() in ["vit", 'vit-base'] and include_state:
+        if architecture.lower() in ['vit', 'vit-base'] and include_state:
             pred_force = vit_predict_force_state(model, img, state, force)
         elif architecture.lower() in ['vit', 'vit-base'] and not include_state:
             pred_force = vit_predict_force_visu(model, img)
@@ -192,8 +187,9 @@ def run_test_experiment(architecture: str, transforms, include_state: bool = Tru
         test_predictions.append([f for f in pred_force.squeeze(0).detach().cpu().numpy()] if include_state else pred_force.squeeze(0).detach().cpu().numpy())
     
     test_metrics = np.array(test_metrics)
-    test_forces = np.array(test_forces).reshape(-1, 6) if include_state else np.array(test_forces).mean(axis=0)
-    test_predictions = np.array(test_predictions).reshape(-1, 6) if include_state else np.array(test_predictions)
+    test_forces = np.array(test_forces).reshape(-1, 6)[:, :3] if include_state else np.array(test_forces).mean(axis=0)[:, :3]
+    test_predictions = np.array(test_predictions).reshape(-1, 6)[:, :3] if include_state else np.array(test_predictions)[:, :3]
+    test_dtw = [dtw(f, p) for f, p in zip(test_forces, test_predictions)]
 
 
     for j in tqdm(range(len(shared_data))):
@@ -202,7 +198,7 @@ def run_test_experiment(architecture: str, transforms, include_state: bool = Tru
         state = torch.from_numpy(d['state']).unsqueeze(0).float().cuda()
         force = torch.from_numpy(d['force']).unsqueeze(0).float().cuda()
 
-        if architecture.lower() in ["vit", 'vit-base'] and include_state:
+        if architecture.lower() in ['vit', 'vit-base'] and include_state:
             pred_force = vit_predict_force_state(model, img, state, force)
         elif architecture.lower() in ['vit', 'vit-base'] and not include_state:
             pred_force = vit_predict_force_visu(model, img)
@@ -218,19 +214,20 @@ def run_test_experiment(architecture: str, transforms, include_state: bool = Tru
         shared_predictions.append([f for f in pred_force.squeeze(0).detach().cpu().numpy()] if include_state else pred_force.squeeze(0).detach().cpu().numpy())
     
     shared_metrics = np.array(shared_metrics)
-    shared_forces = np.array(shared_forces).reshape(-1, 6) if include_state else np.array(shared_forces).mean(axis=0)
-    shared_predictions = np.array(shared_predictions).reshape(-1, 6) if include_state else np.array(shared_predictions)
+    shared_forces = np.array(shared_forces).reshape(-1, 6)[:, :3] if include_state else np.array(shared_forces).mean(axis=0)[:, :3]
+    shared_predictions = np.array(shared_predictions).reshape(-1, 6)[:, :3] if include_state else np.array(shared_predictions)[:, :3]
+    shared_dtw = [dtw(f, p) for f, p in zip(shared_forces, shared_predictions)]
 
-
-    results = {'test_rmse': test_metrics, 'test_gt': test_forces, 'test_pred': test_predictions,
-               'shared_rmse': shared_metrics, 'shared_gt': shared_forces, 'shared_pred': shared_predictions}
+    results = {'test_rmse': test_metrics, 'test_dtw': test_dtw, 'test_gt': test_forces, 'test_pred': test_predictions,
+               'shared_rmse': shared_metrics, 'shared_dtw': shared_dtw, 'shared_gt': shared_forces, 'shared_pred': shared_predictions}
 
     return results
 
 
 def save_results(args, results):
-    print("The results will be saved at: {}".format(args.save_dir))
-    save_dir = Path(args.save_dir)
+    root_dir = Path('/nfs/home/mreyzabal/img2force')
+    print("The results will be saved at: {}/{}".format(root_dir, args.save_dir))
+    save_dir = root_dir/args.save_dir
     save_dir.makedirs_p()
     f = open(save_dir/'{}_{}_{}.pkl'.format(args.architecture.lower(), "state" if args.state else "visu", args.train_type), 'wb')
     pickle.dump(results, f)

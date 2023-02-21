@@ -9,3 +9,5 @@ blessings
 progressbar2
 scipy
 tensorbardx
+prettytable
+seaborn

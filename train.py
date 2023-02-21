@@ -47,7 +47,7 @@ parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'str
 
 best_error = -1
 n_iter = 0
-num_samples = 150
+num_samples = 100
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -105,10 +105,10 @@ def main():
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.scenes)))
 
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True
+        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True
     )
     val_loader = DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0, pin_memory=True
+        val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True
     )
 
     # Create the model
