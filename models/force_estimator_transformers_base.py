@@ -137,6 +137,8 @@ class BaseViT(nn.Module):
                 nn.Linear(50, num_classes)
             )
 
+        # self.apply(self._init_weights)
+
     def forward(self, img, var = None, robot_state = None):
         x = self.to_patch_embedding(img)
         b, n, _ = x.shape
@@ -156,3 +158,18 @@ class BaseViT(nn.Module):
             x = torch.cat((x, robot_state.squeeze(1)), dim=1)
 
         return self.mlp_head(x)
+    
+    def _init_weights(self, module):
+        """Initialize the weights
+
+        Args:
+            module (_type_): _description_
+        """
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()

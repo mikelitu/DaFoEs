@@ -97,6 +97,8 @@ class DistillWrapper(nn.Module):
             nn.Linear(dim, num_classes)
         )
 
+        # self.apply(self._init_weights)
+
     def forward(self, img, labels, robot_state = None, temperature = None, alpha = None, **kwargs):
         b, *_ = img.shape
         alpha = alpha if exists(alpha) else self.alpha
@@ -125,3 +127,18 @@ class DistillWrapper(nn.Module):
             distill_loss = F.l1_loss(distill_logits, teacher_labels)
 
         return loss * (1 - alpha) + distill_loss * alpha
+    
+    def _init_weights(self, module):
+        """Initialize the weights
+
+        Args:
+            module (_type_): _description_
+        """
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()

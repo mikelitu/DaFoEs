@@ -115,7 +115,6 @@ class ResnetEncoder(nn.Module):
 
         return x
 
-
 class ForceEstimatorVS(nn.Module):
 
     """
@@ -132,6 +131,8 @@ class ForceEstimatorVS(nn.Module):
         self.linear3 = FcBlock(84, 180)
         self.linear4 = FcBlock(180, 50)
         self.final = nn.Linear(50, 3)
+
+        # self.apply(self._init_weights)
     
     def forward(self, x, robot_state=None):
 
@@ -144,7 +145,15 @@ class ForceEstimatorVS(nn.Module):
         out = self.linear4(out)
         out = self.final(out)
         return out
-
+    
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform(module.weight)
+            if module.bias is not None:
+                module.bias.data.fill_(0.01)
+        
+        elif isinstance(module, nn.Conv2d):
+            nn.init.normal_(module.weight.data, 0.0, 0.02)
 
 class ForceEstimatorV(nn.Module):
     """
@@ -159,6 +168,8 @@ class ForceEstimatorV(nn.Module):
         self.linear1 = FcBlock(2048 * 8 * 8, 500)
         self.final = nn.Linear(500, 3)
 
+        # self.apply(self._init_weights)
+
     def forward(self, x):
         out = self.encoder(x)
         out_flatten = out.view(out.shape[0], -1)
@@ -166,6 +177,15 @@ class ForceEstimatorV(nn.Module):
         out = self.final(out)
 
         return out
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform(module.weight)
+            if module.bias is not None:
+                module.bias.data.fill_(0.01)
+        
+        elif isinstance(module, nn.Conv2d):
+            nn.init.normal_(module.weight.data, 0.0, 0.02)
 
 
 class ForceEstimatorS(nn.Module):
@@ -184,6 +204,8 @@ class ForceEstimatorS(nn.Module):
         self.linear6 = FcBlock(500, 50)
         self.final = nn.Linear(50, 3)
 
+        # self.apply(self._init_weights)
+
     def forward(self, x):
         out = self.linear1(x)
         out = self.linear2(out)
@@ -194,6 +216,14 @@ class ForceEstimatorS(nn.Module):
         out = self.final(out)
         return out
 
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform(module.weight)
+            if module.bias is not None:
+                module.bias.data.fill_(0.01)
+        
+        elif isinstance(module, nn.Conv2d):
+            nn.init.normal_(module.weight.data, 0.0, 0.02)
 
 class RecurrentCNN(nn.Module):
 
