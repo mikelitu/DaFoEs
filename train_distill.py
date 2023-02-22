@@ -46,7 +46,7 @@ parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'str
 
 best_error = -1
 n_iter = 0
-num_samples = 300
+num_samples = 250
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -160,16 +160,16 @@ def main():
         vit_model.load_state_dict(weights_vit['state_dict'], strict=False)
     
     print("=> Setting Adam optimizer")
-    vit_optimizer = torch.optim.Adam(distiller.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
+    vit_optimizer = torch.optim.Adam(distiller.parameters(), lr=1e-3 if args.type=="vs" else 1e-4, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
     
 
     with open(args.save_path/args.log_summary, 'w') as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss_vit', 'validation_loss_vit'])
+        writer.writerow(['train_loss', 'validation_loss'])
     
     with open(args.save_path/args.log_full, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss_vit'])
+        writer.writerow(['train_loss', 'dist_loss'])
     
     logger = TermLogger(n_epochs=args.epochs, train_size=len(train_loader), valid_size=len(val_loader))
     logger.epoch_bar.start()
@@ -217,9 +217,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, di
     global n_iter, device
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter(i=1,precision=4)
+    losses = AverageMeter(i=2,precision=4)
     w1, w2 = args.rmse_loss_weight, args.gd_loss_weight
-    l1_lambda = 1e-4
+    l1_lambda = 1e-3
 
     end = time.time()
     logger.train_bar.update(0)
@@ -234,21 +234,28 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, di
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            loss = dist_predict_force_state(distiller, img, state, forces, True)
+            loss_dist = dist_predict_force_state(distiller, img, state, forces, True)
+            l1_norm = sum(p.abs().sum() for p in distiller.student.parameters())
+            loss = w1 * loss_dist + l1_lambda * l1_norm
 
             if log_losses:
-                train_writer.add_scalar('Loss_ViT', loss.item(), n_iter)
+                train_writer.add_scalar('Loss', loss.item(), n_iter)
+                train_writer.add_scalar('Loss dist', loss_dist.item(), n_iter)
 
         else:
             state = None
             forces = forces.mean(axis=1)
-            loss = dist_predict_force_visu(distiller, img, forces, True)
+            loss_dist = dist_predict_force_visu(distiller, img, forces, True)
+            # Add L1 regularization
+            l1_norm = sum(p.abs().sum() for p in distiller.parameters())
+            loss = w1 * loss_dist + l1_lambda * l1_norm
 
             if log_losses:
-                train_writer.add_scalar('Loss_ViT', loss.item(), n_iter)
+                train_writer.add_scalar('Loss', loss.item(), n_iter)
+                train_writer.add_scalar('Loss dist', loss_dist.item(), n_iter)
         
         # record loss and EPE
-        losses.update([loss.item()], args.batch_size)
+        losses.update([loss.item(), loss_dist.item()], args.batch_size)
 
         # compute gradient and do Adam step for vit
         vit_optimizer.zero_grad()
@@ -262,9 +269,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, di
         with open(args.save_path/args.log_full, 'a') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
             if args.type == 'vs':
-                writer.writerow([loss.item()])
+                writer.writerow([loss.item(), loss_dist.item()])
             else:
-                writer.writerow([loss.item()])
+                writer.writerow([loss.item(), loss_dist.item()])
 
         logger.train_bar.update(i+1)
         if i % args.print_freq == 0:
@@ -272,7 +279,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, di
         
         n_iter += 1
     
-    return losses.avg[0]
+    return losses.avg[1]
 
 
 @torch.no_grad()

@@ -47,7 +47,7 @@ parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'str
 
 best_error = -1
 n_iter = 0
-num_samples = 300
+num_samples = 250
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -114,7 +114,7 @@ def main():
         model.load_state_dict(weights_vit['state_dict'], strict=False)
     
     print("=> Setting Adam optimizer")
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
     
     #Initialize losses
     mse = nn.MSELoss()
@@ -175,7 +175,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
     data_time = AverageMeter()
     losses = AverageMeter(i=2,precision=4)
     w1, w2 = args.rmse_loss_weight, args.gd_loss_weight
-    l1_lambda = 1e-4
+    l1_lambda = 1e-3
 
     #switch the vit_models to train mode
     model.train()

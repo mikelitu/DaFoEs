@@ -48,7 +48,7 @@ parser.add_argument('--att-type', default=None, help='add attention blocks to th
 
 best_error = -1
 n_iter = 0
-num_samples = 300
+num_samples = 250
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -195,7 +195,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cn
     data_time = AverageMeter()
     losses = AverageMeter(i=2,precision=4)
     w1, w2 = args.rmse_loss_weight, args.gd_loss_weight
-    l1_lambda = 1e-4
+    l1_lambda = 1e-3
 
     #switch the vit_models to train mode
     cnn_model.train()
