@@ -15,8 +15,9 @@ from utils import save_checkpoint
 from tensorboardX import SummaryWriter
 from path import Path
 from logger import TermLogger, AverageMeter
-from models.distill import DistillableViT, DistillWrapper
-from models.force_estimator_2d import ForceEstimatorV, ForceEstimatorVS
+from models.force_estimator_transformers import ViT
+from models.force_estimator_transformers_base import BaseViT
+from models.force_estimator_2d import ForceEstimatorS
 from models.recorder import Recorder
 from datasets.vision_state_dataset import VisionStateDataset
 
@@ -57,7 +58,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/{}'.format('vit-dist')/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/{}'.format('fc')/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -74,32 +75,13 @@ def main():
 
 
     #Initialize the transformations
-    normalize = augmentations.Normalize(mean = [0.45, 0.45, 0.45],
-                                        std = [0.225, 0.225, 0.225])
-    
     # noise = augmentations.GaussianNoise(noise_factor = 0.25)
-
-    train_transform = augmentations.Compose([
-        augmentations.CentreCrop(),
-        augmentations.SquareResize(),
-        augmentations.RandomScaleCrop(),
-        augmentations.ArrayToTensor(),
-        normalize,
-        # noise
-    ])
-
-    val_transform = augmentations.Compose([
-        augmentations.CentreCrop(),
-        augmentations.SquareResize(),
-        augmentations.ArrayToTensor(),
-        normalize
-    ])
     
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type)
-    val_dataset = VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type)
+    train_dataset = VisionStateDataset(args.data, is_train=True, transform=None, seed=args.seed, train_type=args.train_type)
+    val_dataset = VisionStateDataset(args.data, is_train=False, transform=None, seed=args.seed, train_type=args.train_type)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.scenes)))
@@ -119,57 +101,31 @@ def main():
     else:
         include_state = True
 
-    print("=> Creating the {} teacher and the student for distillation training...".format("vision & state" if include_state else "vision"))
+    print("=> Creating the Linear Force Estimator model")
 
-    teacher = ForceEstimatorVS(rs_size=25, num_layers=50, pretrained=False) if include_state else ForceEstimatorV(num_layers=50, pretrained=False)
-    checkpoint_rootdir = Path('/nfs/home/mreyzabal/checkpoints/img2force/cnn/{}'.format(args.name))
-    checkpoint_dir = checkpoint_rootdir.dirs()[-1]
-    checkpoints = torch.load(checkpoint_dir/'checkpoint.pth.tar')
-    teacher.load_state_dict(checkpoints['state_dict'], strict=True)
-    teacher.to(device)
+    model = ForceEstimatorS(rs_size=25)
 
-    vit_model = DistillableViT(
-                image_size = 256,
-                patch_size = args.patch_size,
-                num_classes = 3,
-                dim = 1024,
-                depth = 6,
-                heads = 16,
-                mlp_dim = 2048,
-                dropout = 0.1,
-                emb_dropout = 0.1,
-                state_include = include_state
-    )
-
-    vit_model.to(device)
-
-    distiller = DistillWrapper(
-        student = vit_model,
-        teacher = teacher,
-        temperature = 3,
-        alpha = 0.4,
-        hard = False
-    )
-
-    distiller.to(device)
+    model.to(device)
 
     #Load parameters
     if args.pretrained:
-        print("=> Using pre-trained weights for ViT")
+        print("=> Using pre-trained weights for for Linear model")
         weights_vit = torch.load(args.pretrained)
-        vit_model.load_state_dict(weights_vit['state_dict'], strict=False)
+        model.load_state_dict(weights_vit['state_dict'], strict=False)
     
     print("=> Setting Adam optimizer")
-    vit_optimizer = torch.optim.Adam(distiller.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
     
+    #Initialize losses
+    mse = nn.MSELoss()
 
     with open(args.save_path/args.log_summary, 'w') as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss_vit', 'validation_loss_vit'])
+        writer.writerow(['train_loss', 'validation_loss'])
     
     with open(args.save_path/args.log_full, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss_vit'])
+        writer.writerow(['train_loss', 'mse_loss'])
     
     logger = TermLogger(n_epochs=args.epochs, train_size=len(train_loader), valid_size=len(val_loader))
     logger.epoch_bar.start()
@@ -179,12 +135,12 @@ def main():
 
         #train for one epoch
         logger.reset_train_bar()
-        train_loss = train(args, train_loader, distiller, vit_optimizer, logger, training_writer)
+        train_loss = train(args, train_loader, model, optimizer, logger, training_writer, mse)
         logger.train_writer.write(' * Avg Loss: {:.3f}'.format(train_loss))
         
         #evaluate the model in validation set
         logger.reset_valid_bar()
-        errors, error_names = validate(args, val_loader, vit_model, logger, output_writers)
+        errors, error_names = validate(args, val_loader, model, logger, output_writers, mse=mse)
         error_string = ', '.join('{} : {:.3f}'.format(name, error) for name, error in zip(error_names, errors))
         logger.valid_writer.write(' * Avg {}'.format(error_string))
 
@@ -203,7 +159,7 @@ def main():
         save_checkpoint(
             args.save_path, {
                 'epoch': epoch + 1,
-                'state_dict': vit_model.to_vit().state_dict(),
+                'state_dict': model.state_dict(),
             },
             is_best)
         
@@ -213,13 +169,16 @@ def main():
     logger.epoch_bar.finish()
 
 
-def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, distiller: DistillWrapper, vit_optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter):
+def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, model: nn.Module, optimizer: torch.optim.Adam, logger: TermLogger, train_writer: SummaryWriter, mse: nn.MSELoss):
     global n_iter, device
     batch_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter(i=1,precision=4)
+    losses = AverageMeter(i=2,precision=4)
     w1, w2 = args.rmse_loss_weight, args.gd_loss_weight
     l1_lambda = 1e-4
+
+    #switch the vit_models to train mode
+    model.train()
 
     end = time.time()
     logger.train_bar.update(0)
@@ -229,31 +188,26 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, di
             break
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
-        img = data['img'].to(device)
-        forces = data['forces'].to(device)
+        forces = data['forces'].view(-1, 3).to(device)
 
-        if args.type == 'vs':
-            state = data['robot_state'].to(device)            
-            loss = dist_predict_force_state(distiller, img, state, forces, True)
+        state = data['robot_state'].view(-1, 25).to(device)       
+        pred_forces = model(state)
+        mse_loss = mse(pred_forces, forces)
+        # Add L1 regularization
+        l1_norm = sum(p.abs().sum() for p in model.parameters())
+        loss = w1 * mse_loss + l1_lambda * l1_norm
 
-            if log_losses:
-                train_writer.add_scalar('Loss_ViT', loss.item(), n_iter)
-
-        else:
-            state = None
-            forces = forces.mean(axis=1)
-            loss = dist_predict_force_visu(distiller, img, forces, True)
-
-            if log_losses:
-                train_writer.add_scalar('Loss_ViT', loss.item(), n_iter)
+        if log_losses:
+            train_writer.add_scalar('MSE', mse_loss.item(), n_iter)
+            train_writer.add_scalar('Loss', loss.item(), n_iter)
         
         # record loss and EPE
-        losses.update([loss.item()], args.batch_size)
+        losses.update([loss.item(), mse_loss.item()], args.batch_size)
 
         # compute gradient and do Adam step for vit
-        vit_optimizer.zero_grad()
+        optimizer.zero_grad()
         loss.backward()
-        vit_optimizer.step()
+        optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -262,9 +216,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, di
         with open(args.save_path/args.log_full, 'a') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
             if args.type == 'vs':
-                writer.writerow([loss.item()])
+                writer.writerow([loss.item(), mse_loss.item()])
             else:
-                writer.writerow([loss.item()])
+                writer.writerow([loss.item(), mse_loss.item()])
 
         logger.train_bar.update(i+1)
         if i % args.print_freq == 0:
@@ -272,39 +226,29 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, di
         
         n_iter += 1
     
-    return losses.avg[0]
-
+    return losses.avg[1]
 
 @torch.no_grad()
-def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vit_model: DistillableViT, logger: TermLogger, output_writers: SummaryWriter = [], mse = None):
+def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, logger: TermLogger, output_writers: SummaryWriter = [], mse = None):
     global devic
     batch_time = AverageMeter()
     losses = AverageMeter(i=1, precision=4)
     log_outputs = len(output_writers) > 0
 
     #switch to evaluate mode
-    vit_model = vit_model.to_vit().to(device)
-    vit_model.eval()
+    model.eval()
 
     end = time.time()
     logger.valid_bar.update(0)
 
     for i, data in enumerate(val_loader):
-        img = data['img'].to(device)
-        forces = data['forces'].to(device)
+        forces = data['forces'].view(-1, 3).to(device)
 
-        if args.type == 'vs':
-            state = data['robot_state'].to(device)            
-            vit_pred_forces = vit_predict_force_state(vit_model, img, state, forces, True)
-            vit_loss = torch.sqrt(((forces - vit_pred_forces) ** 2).mean())
-            losses.update([vit_loss.item()])
+        state = data['robot_state'].view(-1, 25).to(device)            
+        pred_forces = model(state)
+        loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
+        losses.update([loss.item()])
 
-        else:
-            state = None
-            forces = forces.mean(axis=1)
-            vit_pred_forces = vit_predict_force_visu(vit_model, img, True)
-            vit_loss = torch.sqrt(((forces - vit_pred_forces) ** 2).mean())
-            losses.update([vit_loss.item()])
         
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -314,51 +258,7 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vi
             logger.valid_writer.write('Valid: Time {} Loss {}'.format(batch_time, losses))
     
     logger.valid_bar.update(len(val_loader))
-    return losses.avg, ['ViT Loss']
-
-
-def dist_predict_force_state(model, images, state, forces, is_train = True):
-    losses = torch.zeros(*forces.shape).to(device)
-    
-    for i in range(state.shape[1]):
-        losses[:, i, :] = model(images, forces[:, i, :], state[:, i, :].unsqueeze(1))
-    
-    return losses.mean()
-
-
-def dist_predict_force_visu(model, images, forces, is_train = True):
-
-    loss = model(images, forces)
-    return loss 
-
-
-def vit_predict_force_state(model, images, state, forces, is_train = True):
-    preds_forces = torch.zeros(*forces.shape).to(device)
-
-    if is_train:
-        sampled_token_ids = False
-    else:
-        sampled_token_ids = True
-    
-    for i in range(state.shape[1]):
-        if not sampled_token_ids:
-            preds_forces[:, i, :] = model(images, sampled_token_ids, state[:, i, :].unsqueeze(1))
-        else:
-            preds_forces[:, i, :], token_ids = model(images, sampled_token_ids, state[:, i, :].unsqueeze(1))
-    
-    return preds_forces if is_train else (preds_forces, token_ids)
-
-
-def vit_predict_force_visu(model, images, is_train = True):
-
-    if is_train:
-        sampled_token_ids = False
-        pred_forces = model(images, sampled_token_ids, None)
-    else:
-        sampled_token_ids = True
-        pred_forces, token_ids = model(images, sampled_token_ids, None)
-    
-    return pred_forces if is_train else (pred_forces, token_ids)
+    return losses.avg, ['Loss']
 
     
 if __name__ == "__main__":

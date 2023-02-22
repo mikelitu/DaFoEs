@@ -118,7 +118,7 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
     checkpoints_root = Path('/home/md21local/mreyzabal/checkpoints/img2force')
     checkpoints = checkpoints_root/"{}/{}_{}".format(architecture, "visu_state" if include_state else "visu", train_mode)
     print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
-    checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
+    checkpoint_dir = sorted(checkpoints.dirs())[-1]/'model_best.pth.tar'
     print("LOADING EXPERIMENT [===> ]")
     print("Loading weights...")
     checkpoint = torch.load(checkpoint_dir)
@@ -241,6 +241,7 @@ def main():
         mean = [0.45, 0.45, 0.45],
         std = [0.225, 0.225, 0.225]
     )
+
     transforms = Compose([
         CentreCrop(),
         SquareResize(),

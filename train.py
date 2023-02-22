@@ -126,7 +126,7 @@ def main():
         vit_model = ViT(
                 image_size = 256,
                 patch_size = args.patch_size,
-                num_classes = 6,
+                num_classes = 3,
                 dim = 1024,
                 depth = 6,
                 heads = 16,
@@ -142,7 +142,7 @@ def main():
         vit_model = BaseViT(
                 image_size = 256,
                 patch_size = args.patch_size,
-                num_classes = 6,
+                num_classes = 3,
                 dim = 1024,
                 depth = 6,
                 heads = 16,
@@ -161,7 +161,7 @@ def main():
         vit_model.load_state_dict(weights_vit['state_dict'], strict=False)
     
     print("=> Setting Adam optimizer")
-    vit_optimizer = torch.optim.Adam(vit_model.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
+    vit_optimizer = torch.optim.Adam(vit_model.parameters(), lr=1e-3 if args.type=="vs" else 1e-4, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
     
     #Initialize losses
     mse = nn.MSELoss()

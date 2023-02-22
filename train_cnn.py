@@ -135,7 +135,7 @@ def main():
         cnn_model.load_state_dict(weights_cnn['state_dict'], strict=False)
     
     print("=> Setting Adam optimizer")
-    cnn_optimizer = torch.optim.Adam(cnn_model.parameters(), lr=args.lr, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
+    cnn_optimizer = torch.optim.Adam(cnn_model.parameters(), lr=1e-3 if args.type == "vs" else 1e-4, betas=(args.momentum, args.beta), weight_decay=args.weight_decay)
 
     #Initialize losses
     mse = nn.MSELoss()

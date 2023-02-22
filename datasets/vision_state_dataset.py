@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import os
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import imageio
 import numpy as np
 import random
@@ -15,9 +15,6 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 def load_as_float(path: Path) -> np.ndarray:
     return  imageio.imread(path).astype(np.float32)
-
-def normalize_labels(labels: np.ndarray, eps=1e-10) -> np.ndarray:
-    return (labels - labels.mean(axis=0)) / (labels.std(axis=0) + eps) 
 
 
 
@@ -60,36 +57,49 @@ class VisionStateDataset(Dataset):
     def crawl_folders(self):
         
         samples = []
+        mean_labels, std_labels = [], []
+        mean_forces, std_forces = [], []
 
         for scene in self.scenes:
             labels = np.array(pd.read_csv(scene/'labels.csv')).astype(np.float32)
-            norm_labels = normalize_labels(labels)
+
+            #Appending mean and std for the normalization of the labels
+            mean_labels.append(labels.mean(axis=0))
+            std_labels.append(labels.std(axis=0))
+            mean_forces.append((0.25 * labels[:, -6:-3]).mean(axis=0))
+            std_forces.append((0.25 * labels[:, -6:-3]).std(axis=0))
+
             images = sorted(scene.files("*.png"))
-            n_labels = len(norm_labels) // len(images)
+            n_labels = len(labels) // len(images)
             step = 7
 
             for i in range(len(images)):
-                if i < 25: continue
+                if i < 80: continue
                 if i > len(images) - 25: break
                 sample = {}
                 sample['img'] = images[i]
-                sample['label'] = norm_labels[n_labels*i: (n_labels*i) + step]
-                sample['forces'] = 0.25 * labels[n_labels*i:(n_labels*i) + step, -6:]
+                sample['label'] = labels[n_labels*i: (n_labels*i) + step]
+                sample['forces'] = 0.25 * labels[n_labels*i:(n_labels*i) + step, -6:-3]
                 samples.append(sample)
         
+        self.mean_labels = np.mean(mean_labels) 
+        self.std_labels = np.mean(std_labels)
+        self.mean_forces = np.mean(mean_forces)
+        self.std_forces = np.mean(std_forces)
+
         random.shuffle(samples)
         self.samples = samples
     
     def __getitem__(self, index: int) -> dict:
         sample = self.samples[index]
         img = load_as_float(sample['img'])
-        label = sample['label']
+        label = (sample['label'] - self.mean_labels) / (self.std_labels + 1e-10)
 
         if self.transform is not None:
             img = self.transform([img])
             img = img[0]
         
-        return {'img': img, 'robot_state': label[:, :-6], 'forces': sample['forces']}
+        return {'img': img, 'robot_state': label[:, :-6], 'forces': (sample['forces'] - self.mean_forces) / (self.std_forces + 1e-10)}
     
     def __len__(self):
         return len(self.samples)

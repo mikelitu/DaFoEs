@@ -131,7 +131,7 @@ class ForceEstimatorVS(nn.Module):
         self.linear2 = FcBlock(1000 + rs_size, 84)
         self.linear3 = FcBlock(84, 180)
         self.linear4 = FcBlock(180, 50)
-        self.final = nn.Linear(50, 6)
+        self.final = nn.Linear(50, 3)
     
     def forward(self, x, robot_state=None):
 
@@ -157,7 +157,7 @@ class ForceEstimatorV(nn.Module):
         self.encoder = ResnetEncoder(num_layers, pretrained, att_type=att_type)
 
         self.linear1 = FcBlock(2048 * 8 * 8, 500)
-        self.final = nn.Linear(500, 6)
+        self.final = nn.Linear(500, 3)
 
     def forward(self, x):
         out = self.encoder(x)
@@ -217,7 +217,6 @@ class RecurrentCNN(nn.Module):
         batch_size = x.shape[0]
         x = self.encoder(x)
         x = x.reshape(batch_size, -1, self.embed_dim)
-        print(x.shape)
         #lstm part
         h_0 = torch.autograd.Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))
         c_0 = torch.autograd.Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))

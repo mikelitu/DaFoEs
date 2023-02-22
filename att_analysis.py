@@ -16,8 +16,8 @@ import pandas as pd
 
 num_img = 307
 feature = "random"
-include_state = False
-model_name = 'vit'
+include_state = True
+model_name = 'cnn-bam'
 
 # The different possible models to analyse the attention map
 
@@ -80,10 +80,16 @@ def plot_attention(attns: torch.Tensor):
     
     for i, attention in enumerate(attns):
         fig = plt.figure(figsize=(1920/100, 1080/100), dpi=100)
-        ax = sns.heatmap(attention[:, 1:, 1:].mean(axis=0).tolist(),
-                        vmin=attention[:, 1:, 1:].mean(axis=0).min(),
-                        vmax=attention[:, 1:, 1:].mean(axis=0).max(),
-                        cmap='Reds', cbar=False)
+        if model_name == "vit-base" or model_name == 'vit':
+            ax = sns.heatmap(attention[:, 1:, 1:].mean(axis=0).tolist(),
+                            vmin=attention[:, 1:, 1:].mean(axis=0).min(),
+                            vmax=attention[:, 1:, 1:].mean(axis=0).max(),
+                            cmap='Reds', cbar=False)
+        else:
+            ax = sns.heatmap(attention.mean(axis=0).tolist(),
+                            vmin=attention.mean(axis=0).min(),
+                            vmax=attention.mean(axis=0).max(),
+                            cmap='Reds', cbar=False)
         plt.axis("off")
 
         plt.show()
@@ -115,13 +121,13 @@ def main():
 
     img = transforms([img])[0]
 
-    imageio.imsave('test.png', img.permute(1, 2, 0).numpy().astype(np.uint8))
+    imageio.imsave('test.png', img.permute(1, 2, 0).numpy())
     model = models[model_name]
 
     model.eval()
-    root_checkpoint_dir = Path('/home/md21local/mreyzabal/checkpoints/old_img2force/{}/{}_{}'.format(model_name, "visu_state" if include_state else "visu", feature))
+    root_checkpoint_dir = Path('/home/md21local/mreyzabal/checkpoints/img2force/{}/{}_{}'.format(model_name, "visu_state" if include_state else "visu", feature))
     checkpoint_dir = root_checkpoint_dir.dirs()[-1]
-    checkpoints = torch.load(checkpoint_dir/'checkpoint.pth.tar')
+    checkpoints = torch.load(checkpoint_dir/'model_best.pth.tar')
     model.load_state_dict(checkpoints['state_dict'], strict=True)
 
     model = recorders[model_name](model)
