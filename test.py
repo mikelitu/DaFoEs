@@ -115,7 +115,7 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
 
     # Find the corresponding checkpoint
     print("LOADING EXPERIMENT [==>  ]")
-    checkpoints_root = Path('/nfs/home/mreyzabal/checkpoints/img2force')
+    checkpoints_root = Path('/home/md21local/mreyzabal/checkpoints/img2force')
     checkpoints = checkpoints_root/"{}/{}_{}".format(architecture, "visu_state" if include_state else "visu", train_mode)
     print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
     checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
@@ -127,7 +127,7 @@ def load_test_experiment(architecture: str, include_state: bool = True,  train_m
     print("LOADING EXPERIMENT [====>]")
     print("Loading test dataset for corresponding model...")
 
-    root_dir = Path('/nfs/home/mreyzabal/visu_haptic_data')
+    root_dir = Path('/home/md21local/visu_haptic_data')
 
     test_dirs = {
         'random': 'DE_P_D_P_R2',
@@ -225,7 +225,7 @@ def run_test_experiment(architecture: str, transforms, include_state: bool = Tru
 
 
 def save_results(args, results):
-    root_dir = Path('/nfs/home/mreyzabal/img2force')
+    root_dir = Path('/home/md21local/img2force')
     print("The results will be saved at: {}/{}".format(root_dir, args.save_dir))
     save_dir = root_dir/args.save_dir
     save_dir.makedirs_p()

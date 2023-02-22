@@ -17,7 +17,7 @@ import pandas as pd
 num_img = 307
 feature = "random"
 include_state = False
-model_name = 'cnn-bam'
+model_name = 'vit'
 
 # The different possible models to analyse the attention map
 
@@ -77,20 +77,16 @@ def plot_attention(attns: torch.Tensor):
     if not isinstance(attns, list):
         attns = attns.squeeze(0).cpu().numpy()
     
+    
     for i, attention in enumerate(attns):
-        if i == 0:
-            n = int(np.sqrt(attention.shape[0]))
-            
-            fig = plt.figure(figsize=(1920/100, 1080/100), dpi=100)
-            for a in range(attention.shape[0]):
-                plt.subplot(n, n, a+1)
-                ax = sns.heatmap(attention[a].tolist(),
-                                vmin=attention[a].min(),
-                                vmax=attention[a].max(),
-                                cmap='Reds', cbar=False)
-                plt.axis("off")
+        fig = plt.figure(figsize=(1920/100, 1080/100), dpi=100)
+        ax = sns.heatmap(attention[:, 1:, 1:].mean(axis=0).tolist(),
+                        vmin=attention[:, 1:, 1:].mean(axis=0).min(),
+                        vmax=attention[:, 1:, 1:].mean(axis=0).max(),
+                        cmap='Reds', cbar=False)
+        plt.axis("off")
 
-            plt.show()
+        plt.show()
 
 
 def main():
@@ -109,14 +105,12 @@ def main():
         std = [0.225, 0.225, 0.225]
     )
 
-    noise = GaussianNoise(noise_factor=0.3)
 
     transforms = Compose([
         CentreCrop(),
         SquareResize(),
         ArrayToTensor(),
         normalize,
-        noise
     ])
 
     img = transforms([img])[0]
