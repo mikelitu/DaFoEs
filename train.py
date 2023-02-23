@@ -20,6 +20,7 @@ from models.force_estimator_transformers_base import BaseViT
 from models.force_estimator_2d import ForceEstimatorV, ForceEstimatorVS, RecurrentCNN
 from models.recorder import Recorder
 from datasets.vision_state_dataset import VisionStateDataset
+from datasets.chua_dataset import ZhongeChuaDataset
 
 parser = argparse.ArgumentParser(description='Vision and roboto state based force estimator using Token Sampling Transformers',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -44,10 +45,11 @@ parser.add_argument('--name', dest='name', type=str, required=True, help='name o
 parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='weight for rroot mean square error loss')
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness', "position"], default='random', type=str, help='training type for comparison')
+parser.add_argument('--chua', action='store_true')
 
 best_error = -1
 n_iter = 0
-num_samples = 250
+num_samples = 600
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -58,7 +60,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/img2force/{}'.format('vit' if args.token_sampling else 'vit-base')/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('chua' if args.chua else 'img2force', 'vit' if args.token_sampling else 'vit-base')/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -99,11 +101,12 @@ def main():
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type)
-    val_dataset = VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type)
+    train_dataset = ZhongeChuaDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type)
+    val_dataset = ZhongeChuaDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type)
 
-    print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.scenes)))
-    print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.scenes)))
+
+    print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.chua else len(train_dataset.scenes)))
+    print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.chua else len(val_dataset.scenes)))
 
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True
@@ -240,7 +243,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vi
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            pred_forces_vit = vit_predict_force_state(vit_model, img, state, forces, True)
+            pred_forces_vit = vit_predict_force_state(vit_model, img, state.unsqueeze(1) if args.chua else state, forces.unsqueeze(1) if args.chua else forces, True)
             mse_loss_vit = mse(pred_forces_vit, forces)
             # Add L1 regularization
             l1_norm_vit = sum(p.abs().sum() for p in vit_model.parameters())
@@ -252,7 +255,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, vi
 
         else:
             state = None
-            forces = forces.mean(axis=1)
+            forces = forces if args.chua else forces.mean(axis=1)
             pred_forces_vit = vit_predict_force_visu(vit_model, img, True)
             mse_loss_vit = mse(pred_forces_vit, forces)
 
@@ -311,13 +314,13 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, vi
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            vit_pred_forces = vit_predict_force_state(vit_model, img, state, forces, True)
+            vit_pred_forces = vit_predict_force_state(vit_model, img, state.unsqueeze(1) if args.chua else state, forces.unsqueeze(1) if args.chua else forces, True)
             vit_loss = torch.sqrt(((forces - vit_pred_forces) ** 2).mean())
             losses.update([vit_loss.item()])
 
         else:
             state = None
-            forces = forces.mean(axis=1)
+            forces = forces if args.chua else forces.mean(axis=1)
             vit_pred_forces = vit_predict_force_visu(vit_model, img, True)
             vit_loss = torch.sqrt(((forces - vit_pred_forces) ** 2).mean())
             losses.update([vit_loss.item()])

@@ -66,8 +66,8 @@ class VisionStateDataset(Dataset):
             #Appending mean and std for the normalization of the labels
             mean_labels.append(labels.mean(axis=0))
             std_labels.append(labels.std(axis=0))
-            mean_forces.append((0.25 * labels[:, -6:-3]).mean(axis=0))
-            std_forces.append((0.25 * labels[:, -6:-3]).std(axis=0))
+            mean_forces.append((labels[:, -6:-3]).mean(axis=0))
+            std_forces.append((labels[:, -6:-3]).std(axis=0))
 
             images = sorted(scene.files("*.png"))
             n_labels = len(labels) // len(images)
@@ -79,13 +79,13 @@ class VisionStateDataset(Dataset):
                 sample = {}
                 sample['img'] = images[i]
                 sample['label'] = labels[n_labels*i: (n_labels*i) + step]
-                sample['forces'] = 0.25 * labels[n_labels*i:(n_labels*i) + step, -6:-3]
+                sample['forces'] = labels[n_labels*i:(n_labels*i) + step, -6:-3]
                 samples.append(sample)
         
-        self.mean_labels = np.mean(mean_labels) 
-        self.std_labels = np.mean(std_labels)
-        self.mean_forces = np.mean(mean_forces)
-        self.std_forces = np.mean(std_forces)
+        self.mean_labels = np.mean(mean_labels, axis = 0) 
+        self.std_labels = np.mean(std_labels, axis = 0)
+        self.mean_forces = np.mean(mean_forces, axis = 0)
+        self.std_forces = np.mean(std_forces, axis = 0)
 
         random.shuffle(samples)
         self.samples = samples
