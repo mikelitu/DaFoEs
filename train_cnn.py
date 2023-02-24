@@ -90,6 +90,12 @@ def main():
         augmentations.ArrayToTensor(),
         normalize,
         # noise
+    ]) if args.chua else augmentations.Compose([
+        augmentations.SquareResize(),
+        augmentations.RandomScaleCrop(),
+        augmentations.ArrayToTensor(),
+        normalize,
+        # noise
     ])
 
     val_transform = augmentations.Compose([
@@ -97,6 +103,11 @@ def main():
         augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize
+    ]) if args.chua else augmentations.Compose([
+        augmentations.SquareResize(),
+        augmentations.ArrayToTensor(),
+        normalize,
+        # noise
     ])
     
     print("=> Getting scenes from '{}'".format(args.data))
