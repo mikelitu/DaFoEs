@@ -14,7 +14,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def load_as_float(path: Path) -> np.ndarray:
-    return  imageio.imread(path).astype(np.float32)
+    return  imageio.imread(path)[:,:, :3].astype(np.float32)
 
 
 
@@ -103,3 +103,9 @@ class VisionStateDataset(Dataset):
     
     def __len__(self):
         return len(self.samples)
+
+if __name__ == "__main__":
+    root = '/home/md21local/cropped_visu_haptic_data'
+    dataset = VisionStateDataset(root)
+    np.save('labels_mean.npy', dataset.mean_labels)
+    np.save('labels_std.npy', dataset.std_labels)
