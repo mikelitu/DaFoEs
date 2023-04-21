@@ -2,7 +2,7 @@ from path import Path
 import random
 
 def main():
-    root_path = "/home/md21local/visu_haptic_data"
+    root_path = "/home/md21local/visu_depth_haptic_data"
     root_path = Path(root_path)
     dirs = []
     dir_names = []

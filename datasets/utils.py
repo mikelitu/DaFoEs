@@ -73,6 +73,7 @@ def _get_gaussian_kernel2d(kernel_size: Tuple[int], sigma: Tuple[float]) -> torc
     kernel2d = torch.mm(kernel1d_y[:, None], kernel1d_x[None, :])
     return kernel2d
 
+
 def get_reflection(states: List[np.ndarray], forces: List[np.ndarray], mode: str = 'horizontal'):
     assert mode in ['horizontal', 'vertical'], "The mode must be horizontal or vertical"
 
@@ -97,11 +98,11 @@ def get_reflection(states: List[np.ndarray], forces: List[np.ndarray], mode: str
                                                               robot_joints, haptic_position, 
                                                               haptic_orientation, haptic_joints,
                                                               forces):
-        reflected_robot_pos, reflected_robot_or = reflect_cartesian(r_pos, r_or)
-        reflected_robot_joints = reflect_joints(r_joints)
+        reflected_robot_pos, reflected_robot_or = reflect_cartesian(r_pos, r_or, T)
+        reflected_robot_joints = reflect_joints(r_joints, mode=mode)
         reflected_robot_state = np.append(np.append(reflected_robot_pos, reflected_robot_or), reflected_robot_joints)
-        reflected_haptic_pos, reflected_haptic_or = reflect_cartesian(h_pos, h_or)
-        reflected_haptic_joints = reflect_joints(h_joints)
+        reflected_haptic_pos, reflected_haptic_or = reflect_cartesian(h_pos, h_or, T)
+        reflected_haptic_joints = reflect_joints(h_joints, mode=mode)
         reflected_haptic_state = np.append(np.append(reflected_haptic_pos, reflected_haptic_or), reflected_haptic_joints)
         reflected_state = np.append(reflected_robot_state, reflected_haptic_state)
         reflected_states.append(reflected_state)
@@ -130,6 +131,18 @@ def reflect_joints(joints: np.ndarray, mode: str = 'horizontal'):
     return reflected_joints
 
 
+def RGBtoD(r, g, b):
+    if (b + g + r < 255):
+        return 0
+    elif (r >= g) and (r >= b):
+        if (g >= b):
+            return g - b
+        else:
+            return (float(g) - float(b)) + 1529
+    elif (g >= r) and (g >= b):
+        return float(b) - float(r) + 510
+    elif (b >= g) and (b >= r):
+        return float(r) - float(g) + 1020
 
     
 

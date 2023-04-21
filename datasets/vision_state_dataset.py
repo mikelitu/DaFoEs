@@ -9,6 +9,8 @@ import random
 from path import Path
 import pandas as pd
 from PIL import ImageFile
+from datasets.utils import RGBtoD
+from datasets.augmentations import ArrayToTensor, Compose, Normalize, RandomHorizontalFlip, RandomVerticalFlip
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -16,6 +18,14 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 def load_as_float(path: Path) -> np.ndarray:
     return  imageio.imread(path)[:,:, :3].astype(np.float32)
 
+
+def process_depth(rgb_depth: torch.Tensor) -> torch.Tensor:
+    depth = torch.zeros((1, rgb_depth.shape[1], rgb_depth.shape[2]))
+    for i in range(rgb_depth.shape[1]):
+        for j in range(rgb_depth.shape[2]):
+            depth[:, i, j] = RGBtoD(rgb_depth[0, i, j], rgb_depth[1, i, j], rgb_depth[2, i, j])
+    
+    return (depth.float() - depth.mean()) / depth.std()
 
 
 class VisionStateDataset(Dataset):
@@ -29,7 +39,7 @@ class VisionStateDataset(Dataset):
         transform functions takes in a list images and a numpy array representing the intrinsics of the camera and the robot state
     """
 
-    def __init__(self, root, is_train=True, transform=None, seed=0, train_type="random"):
+    def __init__(self, root, recurrency_size=5, load_depths=True, max_depth=25., is_train=True, transform=None, seed=0, train_type="random"):
         np.random.seed(seed)
         random.seed(seed)
         self.root = Path(root)
@@ -51,6 +61,9 @@ class VisionStateDataset(Dataset):
         scene_list_path = self.root/train_files[train_type] if is_train else self.root/val_files[train_type]
         self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)]
         self.transform = transform
+        self.load_depths = load_depths
+        self.max_depth = max_depth
+        self.recurrency_size = recurrency_size
         self.crawl_folders()
         
         
@@ -62,6 +75,8 @@ class VisionStateDataset(Dataset):
 
         for scene in self.scenes:
             labels = np.array(pd.read_csv(scene/'labels.csv')).astype(np.float32)
+            scene_rgb = scene/"RGB_frames"
+            scene_depth = scene/"Depth_frames"
 
             #Appending mean and std for the normalization of the labels
             mean_labels.append(labels.mean(axis=0))
@@ -69,15 +84,17 @@ class VisionStateDataset(Dataset):
             mean_forces.append((labels[:, -6:-3]).mean(axis=0))
             std_forces.append((labels[:, -6:-3]).std(axis=0))
 
-            images = sorted(scene.files("*.png"))
+            images = sorted(scene_rgb.files("*.png"))
+            depth_maps = sorted(scene_depth.files("*.png"))
             n_labels = len(labels) // len(images)
             step = 7
 
             for i in range(len(images)):
-                if i < 80: continue
-                if i > len(images) - 25: break
+                if i < 20: continue
+                if i + self.recurrency_size > len(images) - 20: break
                 sample = {}
-                sample['img'] = images[i]
+                sample['img'] = [im for im in images[i:i+self.recurrency_size]]
+                sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
                 sample['label'] = labels[n_labels*i: (n_labels*i) + step]
                 sample['forces'] = labels[n_labels*i:(n_labels*i) + step, -6:-3]
                 samples.append(sample)
@@ -92,20 +109,31 @@ class VisionStateDataset(Dataset):
     
     def __getitem__(self, index: int) -> dict:
         sample = self.samples[index]
-        img = load_as_float(sample['img'])
-        label = (sample['label'] - self.mean_labels) / (self.std_labels + 1e-10)
+        imgs = [load_as_float(img) for img in sample['img']]
+        depths = [load_as_float(depth) for depth in sample['depth']]
+
+        label = sample['label']
+        forces = sample['forces']
 
         if self.transform is not None:
-            img = self.transform([img])
-            img = img[0]
+            imgs, depths, label, forces = self.transform(imgs, depths, label, forces)
         
-        return {'img': img, 'robot_state': label[:, :-6], 'forces': (sample['forces'] - self.mean_forces) / (self.std_forces + 1e-10)}
+        norm_label = (label - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10)
+        norm_force = (forces - self.mean_forces) / (self.std_forces + 1e-10)
+        depths = [process_depth(depth) for depth in depths]
+
+        return {'img': imgs, 'depth': depths, 'robot_state': norm_label, 'forces': norm_force}
     
     def __len__(self):
         return len(self.samples)
 
 if __name__ == "__main__":
-    root = '/home/md21local/cropped_visu_haptic_data'
-    dataset = VisionStateDataset(root)
+    root = '/home/md21local/visu_depth_haptic_data'
+    normalize = Normalize(mean = [0.45, 0.45, 0.45],
+                          std = [0.225, 0.225, 0.225])
+    
+    transforms = Compose([RandomVerticalFlip(), ArrayToTensor(), normalize])
+    dataset = VisionStateDataset(root, transform=transforms)
     np.save('labels_mean.npy', dataset.mean_labels)
     np.save('labels_std.npy', dataset.std_labels)
+    print(dataset[0]['depth'][0].min())
