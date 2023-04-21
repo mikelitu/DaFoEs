@@ -5,15 +5,18 @@ import numpy as np
 import torchvision.models as models
 import torch.utils.model_zoo as model_zoo
 from models.bam import BAM
+import torch.nn.functional as F
+from typing import List
 
 
 class ResNetMultiImageInput(models.ResNet):
 
-    def __init__(self, block, layers, num_classes=1000, num_input_images=1, att_type=None):
+    def __init__(self, block, layers, num_classes=1000, num_input_images=1,
+                 input_channel=3, att_type=None):
         super(ResNetMultiImageInput, self).__init__(block, layers)
         self.inplanes = 64
         self.conv1 = nn.Conv2d(
-            num_input_images * 3, 64, kernel_size=7, stride=2, padding=3, bias=False
+            num_input_images * input_channel, 64, kernel_size=7, stride=2, padding=3, bias=False
         )
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=False)
@@ -21,8 +24,8 @@ class ResNetMultiImageInput(models.ResNet):
 
         if att_type=='BAM':
             self.bam1 = BAM(64*block.expansion)
-            self.bam2 = BAM(128*block.expansion)
-            self.bam3 = BAM(256*block.expansion)
+            self.bam2 =  None # BAM(128*block.expansion)
+            self.bam3 = None # BAM(256*block.expansion)
         else:
             self.bam1, self.bam2, self.bam3 = None, None, None
 
@@ -38,7 +41,8 @@ class ResNetMultiImageInput(models.ResNet):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1, att_type=None):
+def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1,
+                            include_depth=True, att_type=None):
     """Constructs a ResNet model.
 
     Args:
@@ -49,7 +53,8 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1, at
     assert num_layers in [18, 50], "Can only run with 18 or 50 layer resnet"
     blocks = {18: [2, 2, 2, 2], 50: [3, 4, 6, 3]}[num_layers]
     block_type = {18: models.resnet.BasicBlock, 50: models.resnet.Bottleneck}[num_layers]
-    model = ResNetMultiImageInput(block_type, blocks, num_input_images=num_input_images, att_type=att_type)
+    model = ResNetMultiImageInput(block_type, blocks, num_input_images=num_input_images, 
+                                  input_channel=4 if include_depth else 3, att_type=att_type)
 
     if pretrained:
         loaded = model_zoo.load_url(models.resnet.model_urls['resnet{}'.format(num_layers)])
@@ -62,7 +67,7 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1, at
 class ResnetEncoder(nn.Module):
     """Pytorch module for a resnet encoder
     """
-    def __init__(self, num_layers, pretrained, num_input_images=1, att_type=None):
+    def __init__(self, num_layers, pretrained, num_input_images=1, include_depth=True, att_type=None):
         super(ResnetEncoder, self).__init__()
 
         self.att_type = att_type
@@ -80,8 +85,8 @@ class ResnetEncoder(nn.Module):
         if num_layers not in resnets:
             raise ValueError("{} is not a valid number of resnet layers".format(num_layers))
         
-        if att_type is not None:
-            self.encoder = resnet_multiimage_input(num_layers, pretrained, num_input_images, att_type)
+        if include_depth or att_type is not None:
+            self.encoder = resnet_multiimage_input(num_layers, pretrained, num_input_images, include_depth, att_type)
         else:
             self.encoder = resnets[num_layers](pretrained)
         
@@ -121,13 +126,13 @@ class ForceEstimatorVS(nn.Module):
     Vision + State network architecture from the following paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
     with Vision and Robot State" by Zonghe Chua et al. (https://doi.org/10.48550/arXiv.2011.02112)
     """
-    def __init__(self, rs_size: int, num_layers: int = 18, pretrained: bool = True, att_type: str = None):
+    def __init__(self, rs_size: int, num_layers: int = 18, pretrained: bool = True, include_depth: bool = True, att_type: str = None):
         super(ForceEstimatorVS, self).__init__()
 
         self.encoder = ResnetEncoder(num_layers, pretrained, att_type=att_type)
 
-        self.linear1 = FcBlock(2048 * 8 * 8, 1000)
-        self.linear2 = FcBlock(1000 + rs_size, 84)
+        self.linear1 = FcBlock(2048 * 8 * 8, 512)
+        self.linear2 = FcBlock(512 + rs_size, 84)
         self.linear3 = FcBlock(84, 180)
         self.linear4 = FcBlock(180, 50)
         self.final = nn.Linear(50, 3)
@@ -160,13 +165,13 @@ class ForceEstimatorV(nn.Module):
     Vision only network from the paper: "Towards Force Estimation in Robot-Assisted Surgery using Deep Learning
     with Vision and Robot State" by Zonghe Chua et al. (doi: https://doi.org/10.48550/arXiv.2011.02112)
     """
-    def __init__(self, num_layers: int = 18, pretrained: bool = True, att_type: str = None):
+    def __init__(self, num_layers: int = 18, pretrained: bool = True, include_depth: bool = True, att_type: str = None):
         super(ForceEstimatorV, self).__init__()
 
-        self.encoder = ResnetEncoder(num_layers, pretrained, att_type=att_type)
+        self.encoder = ResnetEncoder(num_layers, pretrained, include_depth=include_depth, att_type=att_type)
 
-        self.linear1 = FcBlock(2048 * 8 * 8, 500)
-        self.final = nn.Linear(500, 3)
+        self.linear1 = FcBlock(2048 * 8 * 8, 512)
+        self.final = nn.Linear(512, 3)
 
         # self.apply(self._init_weights)
 
@@ -225,6 +230,7 @@ class ForceEstimatorS(nn.Module):
         elif isinstance(module, nn.Conv2d):
             nn.init.normal_(module.weight.data, 0.0, 0.02)
 
+
 class RecurrentCNN(nn.Module):
 
     """
@@ -232,26 +238,39 @@ class RecurrentCNN(nn.Module):
     - "Camera Configuration Models for Machine Vision Based Force Estimation in Robot-Assisted Soft Body Manipulation" by Wenjun Liu et al. (doi: https://doi.org/10.1109/ISMR48347.2022.9807587)
     - "A recurrent convolutional neural network approach for sensorless force estimation in robotic surgery" by Arturo Marban et al. (doi: https://doi.org/10.1016/j.bspc.2019.01.011)
     """
-    def __init__(self, embed_dim: int, hidden_size: int, num_layers: int, num_classes: int):
+    def __init__(self, num_layers: int = 18, pretrained: bool = True, include_depth: bool = True, 
+                 att_type: str = None, embed_dim: int = 512, hidden_size: int = 12, num_blocks: int = 2):
+        
         super(RecurrentCNN, self).__init__()
         self.embed_dim = embed_dim
         self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_classes = num_classes
+        self.num_blocks = num_blocks
 
-        self.encoder = ResnetEncoder(in_channels=3, final_features=embed_dim)
-        self.lstm = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.1)
-        self.fc = nn.Linear(hidden_size, num_classes)
+        self.encoder = ResnetEncoder(num_layers=num_layers, pretrained=pretrained, include_depth=include_depth, att_type=att_type)
+        self.linear = nn.Linear(512 * 8 * 8, 512)
+        self.lstm = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=False, dropout=0.1)
+        self.fc = nn.Linear(hidden_size, 3)
     
     def forward(self, x: torch.Tensor, robot_state: torch.Tensor = None) -> torch.Tensor:
         batch_size = x.shape[0]
         x = self.encoder(x)
-        x = x.reshape(batch_size, -1, self.embed_dim)
+        x = x.view(batch_size, -1)
+        x = self.linear(x)
+
+        if robot_state is not None:
+            rs_size = robot_state.shape[-1]
+            padding_dim = (512 - rs_size - 1)
+            robot_state = F.pad(robot_state, (1, padding_dim), 'constant', 0)
+            x = torch.cat([x, robot_state], dim=0)
+            # print(x.shape)
+
+        # x = x.reshape(batch_size, -1, self.embed_dim)
+        print(x.shape)
         #lstm part
-        h_0 = torch.autograd.Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))
-        c_0 = torch.autograd.Variable(torch.zeros(self.num_layers, x.size(0), self.hidden_size))
+        h_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, self.hidden_size))
+        c_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, self.hidden_size))
         x, _ = self.lstm(x, (h_0, c_0))
-        x = x[:, -1, :]
+        # x = x[:, -1, :]
         x = self.fc(x)
         return x
 
