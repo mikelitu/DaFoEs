@@ -48,7 +48,7 @@ parser.add_argument('--include_depth', action='store_true')
 
 best_error = -1
 n_iter = 0
-num_samples = 1000
+num_samples = 2000
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -137,7 +137,7 @@ def main():
     else:
         include_state = True
 
-    print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
+    print("=> Creating the {} recurrent neural network...".format("vision & state" if include_state else "vision"))
 
     if args.type == "v":
         model = RecurrentCNN(
@@ -166,7 +166,7 @@ def main():
 
     #Load parameters
     if args.pretrained:
-        print("=> Using pre-trained weights for ViT")
+        print("=> Using pre-trained weights for CRNN")
         weights_vit = torch.load(args.pretrained)
         model.load_state_dict(weights_vit['state_dict'], strict=False)
     
@@ -178,11 +178,11 @@ def main():
 
     with open(args.save_path/args.log_summary, 'w') as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss_vit', 'validation_loss_vit'])
+        writer.writerow(['train_loss', 'validation_loss'])
     
     with open(args.save_path/args.log_full, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter='\t')
-        writer.writerow(['train_loss_vit', 'mse_loss_vit'])
+        writer.writerow(['train_loss', 'mse_loss'])
     
     logger = TermLogger(n_epochs=args.epochs, train_size=len(train_loader), valid_size=len(val_loader))
     logger.epoch_bar.start()
@@ -250,37 +250,37 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            pred_forces_vit = vit_predict_force_state(model, img, state.unsqueeze(1) if args.chua else state, forces.unsqueeze(1) if args.chua else forces, True)
-            mse_loss_vit = mse(pred_forces_vit, forces)
+            pred_forces = model(img, state)
+            mse_loss = mse(pred_forces, forces)
             # Add L1 regularization
-            l1_norm_vit = sum(p.abs().sum() for p in model.parameters())
-            loss_vit = w1 * mse_loss_vit + l1_lambda * l1_norm_vit
+            l1_norm = sum(p.abs().sum() for p in model.parameters())
+            loss = w1 * mse_loss + l1_lambda * l1_norm
 
             if log_losses:
-                train_writer.add_scalar('MSE_ViT', mse_loss_vit.item(), n_iter)
-                train_writer.add_scalar('Loss_ViT', loss_vit.item(), n_iter)
+                train_writer.add_scalar('MSE', mse_loss.item(), n_iter)
+                train_writer.add_scalar('Loss', loss.item(), n_iter)
 
         else:
             state = None
             forces = forces if args.chua else forces.mean(axis=1)
-            pred_forces_vit = vit_predict_force_visu(model, img, True)
-            mse_loss_vit = mse(pred_forces_vit, forces)
+            pred_forces = model(img)
+            mse_loss = mse(pred_forces, forces)
 
             # Add L1 regularization
-            l1_norm_vit = sum(p.abs().sum() for p in vit_model.parameters())
-            loss_vit = w1 * mse_loss_vit + l1_lambda * l1_norm_vit
+            l1_norm = sum(p.abs().sum() for p in model.parameters())
+            loss = w1 * mse_loss + l1_lambda * l1_norm
 
 
             if log_losses:
-                train_writer.add_scalar('MSE_ViT', mse_loss_vit.item(), n_iter)
-                train_writer.add_scalar('Loss_ViT', loss_vit.item(), n_iter)
+                train_writer.add_scalar('MSE', mse_loss.item(), n_iter)
+                train_writer.add_scalar('Loss', loss.item(), n_iter)
         
         # record loss and EPE
-        losses.update([loss_vit.item(), mse_loss_vit.item()], args.batch_size)
+        losses.update([loss.item(), mse_loss.item()], args.batch_size)
 
         # compute gradient and do Adam step for vit
         optimizer.zero_grad()
-        loss_vit.backward()
+        loss.backward()
         optimizer.step()
 
         # measure elapsed time
@@ -290,9 +290,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
         with open(args.save_path/args.log_full, 'a') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
             if args.type == 'vs':
-                writer.writerow([loss_vit.item(), mse_loss_vit.item()])
+                writer.writerow([loss.item(), mse_loss.item()])
             else:
-                writer.writerow([loss_vit.item(), mse_loss_vit.item()])
+                writer.writerow([loss.item(), mse_loss.item()])
 
         logger.train_bar.update(i+1)
         if i % args.print_freq == 0:
@@ -304,7 +304,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
 
 @torch.no_grad()
 def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, model: nn.Module, logger: TermLogger, output_writers: SummaryWriter = [], mse = None):
-    global devic
+    global device
     batch_time = AverageMeter()
     losses = AverageMeter(i=1, precision=4)
     log_outputs = len(output_writers) > 0
@@ -321,16 +321,16 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            vit_pred_forces = vit_predict_force_state(model, img, state.unsqueeze(1) if args.chua else state, forces.unsqueeze(1) if args.chua else forces, True)
-            vit_loss = torch.sqrt(((forces - vit_pred_forces) ** 2).mean())
-            losses.update([vit_loss.item()])
+            pred_forces = model(img, state)
+            loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
+            losses.update([loss.item()])
 
         else:
             state = None
             forces = forces if args.chua else forces.mean(axis=1)
-            vit_pred_forces = vit_predict_force_visu(model, img, True)
-            vit_loss = torch.sqrt(((forces - vit_pred_forces) ** 2).mean())
-            losses.update([vit_loss.item()])
+            pred_forces = model(img)
+            loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
+            losses.update([loss.item()])
         
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -340,36 +340,7 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
             logger.valid_writer.write('Valid: Time {} Loss {}'.format(batch_time, losses))
     
     logger.valid_bar.update(len(val_loader))
-    return losses.avg, ['ViT Loss']
-
-
-def vit_predict_force_state(model, images, state, forces, is_train = True):
-    preds_forces = torch.zeros(*forces.shape).to(device)
-
-    if is_train:
-        sampled_token_ids = False
-    else:
-        sampled_token_ids = True
-    
-    for i in range(state.shape[1]):
-        if not sampled_token_ids:
-            preds_forces[:, i, :] = model(images, sampled_token_ids, state[:, i, :].unsqueeze(1))
-        else:
-            preds_forces[:, i, :], token_ids = model(images, sampled_token_ids, state[:, i, :].unsqueeze(1))
-    
-    return preds_forces if is_train else (preds_forces, token_ids)
-
-def vit_predict_force_visu(model, images, is_train = True):
-
-    if is_train:
-        sampled_token_ids = False
-        pred_forces = model(images, sampled_token_ids, None)
-    else:
-        sampled_token_ids = True
-        pred_forces, token_ids = model(images, sampled_token_ids, None)
-    
-    return pred_forces if is_train else (pred_forces, token_ids)
-
+    return losses.avg, ['Loss']
     
 if __name__ == "__main__":
     main()
