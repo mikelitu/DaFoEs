@@ -248,7 +248,7 @@ class RecurrentCNN(nn.Module):
 
         self.encoder = ResnetEncoder(num_layers=num_layers, pretrained=pretrained, include_depth=include_depth, att_type=att_type)
         self.linear = nn.Linear(512 * 8 * 8, 512)
-        self.lstm = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=False, dropout=0.1)
+        self.lstm = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=True, dropout=0.1)
         self.fc = nn.Linear(hidden_size, 3)
     
     def forward(self, x: torch.Tensor, robot_state: torch.Tensor = None) -> torch.Tensor:
@@ -264,13 +264,13 @@ class RecurrentCNN(nn.Module):
             x = torch.cat([x, robot_state], dim=0)
             # print(x.shape)
 
-        # x = x.reshape(batch_size, -1, self.embed_dim)
+        x = x.reshape(batch_size, -1, self.embed_dim)
         print(x.shape)
         #lstm part
-        h_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, self.hidden_size))
-        c_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, self.hidden_size))
+        h_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, batch_size, self.hidden_size))
+        c_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, batch_size, self.hidden_size))
         x, _ = self.lstm(x, (h_0, c_0))
-        # x = x[:, -1, :]
+        x = x[:, -1, :]
         x = self.fc(x)
         return x
 
