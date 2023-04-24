@@ -239,7 +239,8 @@ class RecurrentCNN(nn.Module):
     - "A recurrent convolutional neural network approach for sensorless force estimation in robotic surgery" by Arturo Marban et al. (doi: https://doi.org/10.1016/j.bspc.2019.01.011)
     """
     def __init__(self, num_layers: int = 18, pretrained: bool = True, include_depth: bool = True, 
-                 att_type: str = None, embed_dim: int = 512, hidden_size: int = 12, num_blocks: int = 2):
+                 att_type: str = None, embed_dim: int = 512, hidden_size: int = 12, num_blocks: int = 2,
+                 include_rs: bool = True):
         
         super(RecurrentCNN, self).__init__()
         self.embed_dim = embed_dim
@@ -248,28 +249,34 @@ class RecurrentCNN(nn.Module):
 
         self.encoder = ResnetEncoder(num_layers=num_layers, pretrained=pretrained, include_depth=include_depth, att_type=att_type)
         self.linear = nn.Linear(512 * 8 * 8, 512)
-        self.lstm = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=True, dropout=0.1)
+        self.lstm1 = nn.LSTM(input_size=embed_dim, hidden_size=embed_dim, num_layers=num_blocks, batch_first=True, dropout=0.1)
+        self.lstm2 = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=True, dropout=0.1)
         self.fc = nn.Linear(hidden_size, 3)
     
-    def forward(self, x: torch.Tensor, robot_state: torch.Tensor = None) -> torch.Tensor:
-        batch_size = x.shape[0]
-        x = self.encoder(x)
-        x = x.view(batch_size, -1)
-        x = self.linear(x)
+    def forward(self, imgs: torch.Tensor, robot_state: torch.Tensor = None) -> torch.Tensor:
+        batch_size = imgs.shape[0]
+
+        x = torch.zeros((batch_size, imgs.shape[1], self.embed_dim))
+        for i in range(x.shape[1]):
+            out = self.encoder(imgs[:,i])
+            out = out.view(batch_size, -1)
+            x[:,i] = self.linear(out)
 
         if robot_state is not None:
             rs_size = robot_state.shape[-1]
             padding_dim = (512 - rs_size - 1)
             robot_state = F.pad(robot_state, (1, padding_dim), 'constant', 0)
-            x = torch.cat([x, robot_state], dim=0)
+            x = torch.cat([x, robot_state], dim=1)
             # print(x.shape)
 
         x = x.reshape(batch_size, -1, self.embed_dim)
-        print(x.shape)
         #lstm part
-        h_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, batch_size, self.hidden_size))
-        c_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, batch_size, self.hidden_size))
-        x, _ = self.lstm(x, (h_0, c_0))
+        h_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, x.shape[0], self.embed_dim))
+        c_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, x.shape[0], self.embed_dim))
+        x, _ = self.lstm1(x, (h_0, c_0))
+        h_1 = torch.autograd.Variable(torch.zeros(self.num_blocks, x.shape[0], self.hidden_size))
+        c_1 = torch.autograd.Variable(torch.zeros(self.num_blocks, x.shape[0], self.hidden_size))
+        x, _ = self.lstm2(x, (h_1, c_1))
         x = x[:, -1, :]
         x = self.fc(x)
         return x

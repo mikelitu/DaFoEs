@@ -123,7 +123,7 @@ class VisionStateDataset(Dataset):
         depths = [process_depth(depth) for depth in depths]
         imgd = [torch.cat([img, depth], dim=0) for img, depth in zip(imgs, depths)]
 
-        return {'img': imgd, 'robot_state': norm_label, 'forces': norm_force}
+        return {'img': imgd, 'robot_state': norm_label, 'forces': np.mean(norm_force, axis=0)}
     
     def __len__(self):
         return len(self.samples)
