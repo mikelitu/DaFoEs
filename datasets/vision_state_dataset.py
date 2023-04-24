@@ -95,8 +95,8 @@ class VisionStateDataset(Dataset):
                 sample = {}
                 sample['img'] = [im for im in images[i:i+self.recurrency_size]]
                 sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
-                sample['label'] = labels[n_labels*i: (n_labels*i) + step]
-                sample['forces'] = labels[n_labels*i:(n_labels*i) + step, -6:-3]
+                sample['label'] = [np.mean(labels[n_labels*i+a: (n_labels*i+a) + step], axis=0) for a in range(self.recurrency_size)]
+                sample['forces'] = [np.mean(labels[n_labels*i+a:(n_labels*i+a) + step, -6:-3], axis=0) for a in range(self.recurrency_size)]
                 samples.append(sample)
         
         self.mean_labels = np.mean(mean_labels, axis = 0) 
@@ -121,8 +121,9 @@ class VisionStateDataset(Dataset):
         norm_label = (label - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10)
         norm_force = (forces - self.mean_forces) / (self.std_forces + 1e-10)
         depths = [process_depth(depth) for depth in depths]
+        imgd = [torch.cat([img, depth], dim=0) for img, depth in zip(imgs, depths)]
 
-        return {'img': imgs, 'depth': depths, 'robot_state': norm_label, 'forces': norm_force}
+        return {'img': imgd, 'robot_state': norm_label, 'forces': norm_force}
     
     def __len__(self):
         return len(self.samples)
@@ -136,4 +137,4 @@ if __name__ == "__main__":
     dataset = VisionStateDataset(root, transform=transforms)
     np.save('labels_mean.npy', dataset.mean_labels)
     np.save('labels_std.npy', dataset.std_labels)
-    print(dataset[0]['depth'][0].min())
+    print(dataset[0]['img'][0].shape)
