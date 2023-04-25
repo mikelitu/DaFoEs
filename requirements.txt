@@ -13,3 +13,4 @@ prettytable
 seaborn
 einops
 tqdm
+opencv-python
