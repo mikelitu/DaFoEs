@@ -8,9 +8,9 @@ import numpy as np
 import random
 from path import Path
 import pandas as pd
-from PIL import ImageFile
+from PIL import ImageFile, Image
 from datasets.utils import RGBtoD
-from datasets.augmentations import ArrayToTensor, Compose, Normalize, RandomHorizontalFlip, RandomVerticalFlip
+from datasets.augmentations import ArrayToTensor, Compose, Normalize, RandomHorizontalFlip, RandomVerticalFlip, SquareResize
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -18,6 +18,8 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 def load_as_float(path: Path) -> np.ndarray:
     return  imageio.imread(path)[:,:, :3].astype(np.float32)
 
+def load_depth(path: Path) -> np.ndarray:
+    return np.array(Image.open(path)).astype(np.uint16).astype(np.float32)
 
 def process_depth(rgb_depth: torch.Tensor) -> torch.Tensor:
     depth = torch.zeros((1, rgb_depth.shape[1], rgb_depth.shape[2]))
@@ -110,16 +112,17 @@ class VisionStateDataset(Dataset):
     def __getitem__(self, index: int) -> dict:
         sample = self.samples[index]
         imgs = [load_as_float(img) for img in sample['img']]
-        depths = [load_as_float(depth) for depth in sample['depth']]
+        depths = [load_depth(depth) for depth in sample['depth']]
 
-        label = sample['label']
+        labels = sample['label']
         forces = sample['forces']
 
         if self.transform is not None:
-            imgs, depths, label, forces = self.transform(imgs, depths, label, forces)
+            imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces)
         
-        norm_label = (label - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10)
-        norm_force = (forces - self.mean_forces) / (self.std_forces + 1e-10)
+        norm_label = [(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels]
+        norm_force = [(force - self.mean_forces) / (self.std_forces + 1e-10) for force in forces]
+        
         depths = [process_depth(depth) for depth in depths]
         imgd = [torch.cat([img, depth], dim=0) for img, depth in zip(imgs, depths)]
 
@@ -133,8 +136,9 @@ if __name__ == "__main__":
     normalize = Normalize(mean = [0.45, 0.45, 0.45],
                           std = [0.225, 0.225, 0.225])
     
-    transforms = Compose([RandomVerticalFlip(), ArrayToTensor(), normalize])
-    dataset = VisionStateDataset(root, transform=transforms)
+    transforms = Compose([RandomVerticalFlip(), SquareResize(), ArrayToTensor(), normalize])
+    dataset = VisionStateDataset(root, transform=transforms, recurrency_size=5)
     np.save('labels_mean.npy', dataset.mean_labels)
     np.save('labels_std.npy', dataset.std_labels)
-    print(dataset[0]['img'][0].shape)
+    out = dataset[0]
+    print(len(out['robot_state']))
