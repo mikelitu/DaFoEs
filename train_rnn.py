@@ -43,8 +43,9 @@ parser.add_argument('--name', dest='name', type=str, required=True, help='name o
 parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='weight for rroot mean square error loss')
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness', "position"], default='random', type=str, help='training type for comparison')
+parser.add_argument('--att-type', default=None, help='add attention blocks to the CNN')
 parser.add_argument('--chua', action='store_true')
-parser.add_argument('--include_depth', action='store_true')
+parser.add_argument('--include-depth', action='store_true')
 
 best_error = -1
 n_iter = 0
@@ -59,7 +60,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('chua' if args.chua else 'img2force', 'vit' if args.token_sampling else 'vit-base')/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('chua' if args.chua else 'img2force', 'rnn-bam' if args.att_type is not None else 'rnn')/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
