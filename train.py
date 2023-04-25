@@ -46,10 +46,11 @@ parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='w
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness', "position"], default='random', type=str, help='training type for comparison')
 parser.add_argument('--chua', action='store_true')
+parser.add_argument('--include_depth', action='store_true')
 
 best_error = -1
 n_iter = 0
-num_samples = 600
+num_samples = 1000
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True) 
@@ -83,6 +84,8 @@ def main():
     # noise = augmentations.GaussianNoise(noise_factor = 0.25)
 
     train_transform = augmentations.Compose([
+        augmentations.RandomHorizontalFlip(),
+        augmentations.RandomVerticalFlip(),
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
@@ -90,6 +93,8 @@ def main():
         normalize,
         # noise
     ]) if args.chua else augmentations.Compose([
+        augmentations.RandomHorizontalFlip(),
+        augmentations.RandomVerticalFlip(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
         augmentations.ArrayToTensor(),
