@@ -6,6 +6,7 @@ from PIL import Image
 from typing import List, Tuple
 import torch.nn.functional as F
 from datasets.utils import get_reflection
+import cv2
 
 
 '''Set of tranform random routines that takes list of inputs as arguments,
@@ -93,7 +94,7 @@ class RandomScaleCrop(object):
         scaled_h, scaled_w = int(in_h * y_scaling), int(in_w * x_scaling)
 
         scaled_images = [np.array(Image.fromarray(im.astype(np.uint8)).resize((scaled_w, scaled_h))).astype(np.float32) for im in images]
-        scaled_depths = [np.array(Image.fromarray(depth.astype(np.uint16)).resize((scaled_w, scaled_h))).astype(np.float32) for depth in depths]
+        scaled_depths = [cv2.resize(depth.astype(np.uint16), (scaled_w, scaled_h)).astype(np.float32) for depth in depths]
 
         offset_y = np.random.randint(scaled_h - in_h + 1)
         offset_x = np.random.randint(scaled_w - in_w + 1)
@@ -119,7 +120,7 @@ class SquareResize(object):
 
         new_size = (256, 256)
         scaled_images = [np.array(Image.fromarray(im.astype(np.uint8)).resize(new_size)).astype(np.float32) for im in images]
-        scaled_depths = [np.array(Image.fromarray(depth.astype(np.uint16)).resize(new_size, resample=Image.NEAREST)).astype(np.float32) for depth in depths]
+        scaled_depths = [cv2.resize(depth.astype(np.uint16), new_size).astype(np.float32) for depth in depths]
         
         return scaled_images, scaled_depths, states, forces
 
