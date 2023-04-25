@@ -47,6 +47,7 @@ parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'str
 parser.add_argument('--num-layers', choices=[18, 50], default=50, help='number of resnet layers')
 parser.add_argument('--att-type', default=None, help='add attention blocks to the CNN')
 parser.add_argument('--chua', action='store_true')
+parser.add_argument('--include-depth', action='store_true')
 
 best_error = -1
 n_iter = 0
@@ -84,6 +85,8 @@ def main():
     # noise = augmentations.GaussianNoise(noise_factor = 0.25)
 
     train_transform = augmentations.Compose([
+        augmentations.RandomHorizontalFlip(),
+        augmentations.RandomVerticalFlip(),
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
@@ -113,8 +116,8 @@ def main():
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = ZhongeChuaDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type)
-    val_dataset = ZhongeChuaDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type)
+    train_dataset = ZhongeChuaDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=1)
+    val_dataset = ZhongeChuaDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=1)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.chua else len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.chua else len(val_dataset.scenes)))
@@ -131,10 +134,10 @@ def main():
 
     if args.type == "v":
         include_state = False
-        cnn_model = ForceEstimatorV(num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type)
+        cnn_model = ForceEstimatorV(num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type, include_depth=args.include_depth)
     else:
         include_state = True
-        cnn_model = ForceEstimatorVS(rs_size=25, num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type)
+        cnn_model = ForceEstimatorVS(rs_size=25, num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type, include_depth=args.include_depth)
 
     print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
 
