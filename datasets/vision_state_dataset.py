@@ -59,7 +59,7 @@ class VisionStateDataset(Dataset):
                     "position": "val_position.txt"}
 
         scene_list_path = self.root/train_files[train_type] if is_train else self.root/val_files[train_type]
-        self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)]
+        self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)][:-1]
         self.transform = transform
         self.load_depths = load_depths
         self.max_depth = max_depth
@@ -123,7 +123,7 @@ class VisionStateDataset(Dataset):
         depths = [process_depth(depth) for depth in depths]
         imgd = [torch.cat([img, depth], dim=0) for img, depth in zip(imgs, depths)]
 
-        return {'img': imgd, 'robot_state': norm_label, 'forces': np.mean(norm_force, axis=0)}
+        return {'img': imgd[0] if self.recurrency_size==1 else imgd, 'robot_state': norm_label, 'forces': np.mean(norm_force, axis=0)}
     
     def __len__(self):
         return len(self.samples)
