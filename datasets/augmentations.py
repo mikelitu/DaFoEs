@@ -119,7 +119,7 @@ class SquareResize(object):
 
         new_size = (256, 256)
         scaled_images = [np.array(Image.fromarray(im.astype(np.uint8)).resize(new_size)).astype(np.float32) for im in images]
-        scaled_depths = [np.array(Image.fromarray(depth.astype(np.uint16)).resize(new_size)).astype(np.float32) for depth in depths]
+        scaled_depths = [np.array(Image.fromarray(depth.astype(np.uint16)).resize(new_size, resample=Image.NEAREST)).astype(np.float32) for depth in depths]
         
         return scaled_images, scaled_depths, states, forces
 
