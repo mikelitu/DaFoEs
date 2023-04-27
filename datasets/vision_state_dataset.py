@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import os
+from typing import Dict
 
 from torch.utils.data import Dataset, DataLoader
 import imageio
@@ -109,7 +110,7 @@ class VisionStateDataset(Dataset):
         random.shuffle(samples)
         self.samples = samples
     
-    def __getitem__(self, index: int) -> dict:
+    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
         sample = self.samples[index]
         imgs = [load_as_float(img) for img in sample['img']]
         depths = [load_depth(depth) for depth in sample['depth']]
@@ -120,13 +121,14 @@ class VisionStateDataset(Dataset):
         if self.transform is not None:
             imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces)
         
-        norm_label = [(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels]
-        norm_force = [(force - self.mean_forces) / (self.std_forces + 1e-10) for force in forces]
+        norm_label = np.array([(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels])
+        norm_force = np.array([(force - self.mean_forces) / (self.std_forces + 1e-10) for force in forces])
         
         depths = [process_depth(depth) for depth in depths]
         imgd = [torch.cat([img, depth], dim=0) for img, depth in zip(imgs, depths)]
 
-        return {'img': imgd[0] if self.recurrency_size==1 else imgd, 'robot_state': norm_label, 'forces': np.mean(norm_force, axis=0)}
+        return {'img': imgd[0] if self.recurrency_size==1 else imgd, 'robot_state': norm_label, 
+                'forces': np.mean(norm_force, axis=0)}
     
     def __len__(self):
         return len(self.samples)
@@ -137,8 +139,8 @@ if __name__ == "__main__":
                           std = [0.225, 0.225, 0.225])
     
     transforms = Compose([RandomVerticalFlip(), SquareResize(), ArrayToTensor(), normalize])
-    dataset = VisionStateDataset(root, transform=transforms, recurrency_size=5)
+    dataset = VisionStateDataset(root, transform=transforms, recurrency_size=3)
     np.save('labels_mean.npy', dataset.mean_labels)
     np.save('labels_std.npy', dataset.std_labels)
     out = dataset[0]
-    print(len(out['robot_state']))
+    print(out['forces'])
