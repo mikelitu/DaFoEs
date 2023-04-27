@@ -246,38 +246,40 @@ class RecurrentCNN(nn.Module):
         self.embed_dim = embed_dim
         self.hidden_size = hidden_size
         self.num_blocks = num_blocks
+        final_ch = 512 if num_layers == 18 else 2048
 
         self.encoder = ResnetEncoder(num_layers=num_layers, pretrained=pretrained, include_depth=include_depth, att_type=att_type)
-        self.linear = nn.Linear(512 * 8 * 8, 512)
-        self.lstm1 = nn.LSTM(input_size=embed_dim, hidden_size=embed_dim, num_layers=num_blocks, batch_first=True, dropout=0.1)
-        self.lstm2 = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=True, dropout=0.1)
+        self.linear = nn.Linear(final_ch * 8 * 8, embed_dim)
+        self.lstm1 = nn.LSTM(input_size=embed_dim, hidden_size=embed_dim, num_layers=num_blocks, batch_first=True, dropout=0.)
+        self.lstm2 = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=True, dropout=0.)
         self.fc = nn.Linear(hidden_size, 3)
     
     def forward(self, imgs: torch.Tensor, robot_state: torch.Tensor = None) -> torch.Tensor:
-        batch_size = imgs.shape[0]
+        batch_size = imgs[0].shape[0]
+        rec_size = len(imgs)
 
-        x = torch.zeros((batch_size, imgs.shape[1], self.embed_dim))
-        for i in range(x.shape[1]):
-            out = self.encoder(imgs[:,i])
-            out = out.view(batch_size, -1)
-            x[:,i] = self.linear(out)
+        x = torch.zeros(batch_size, rec_size, self.embed_dim) 
+
+        for i in range(batch_size):
+            inp = torch.cat([img[i].unsqueeze(0) for img in imgs], dim=0)
+            out = self.encoder(inp)
+            out = out.view(rec_size, -1)
+            x[i] = self.linear(out)
 
         if robot_state is not None:
             rs_size = robot_state.shape[-1]
             padding_dim = (512 - rs_size - 1)
-            robot_state = F.pad(robot_state, (1, padding_dim), 'constant', 0)
-            x = torch.cat([x, robot_state], dim=1)
-            # print(x.shape)
+            padded_state = F.pad(robot_state, (1, padding_dim), 'constant', 0)
+            x = torch.cat([x, padded_state], dim=1)
 
-        x = x.reshape(batch_size, -1, self.embed_dim)
-        #lstm part
-        h_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, x.shape[0], self.embed_dim))
-        c_0 = torch.autograd.Variable(torch.zeros(self.num_blocks, x.shape[0], self.embed_dim))
-        x, _ = self.lstm1(x, (h_0, c_0))
-        h_1 = torch.autograd.Variable(torch.zeros(self.num_blocks, x.shape[0], self.hidden_size))
-        c_1 = torch.autograd.Variable(torch.zeros(self.num_blocks, x.shape[0], self.hidden_size))
-        x, _ = self.lstm2(x, (h_1, c_1))
+        x = x.reshape(batch_size, -1, self.embed_dim) # reshape the input in case there is a mismatch
+
+        # recurrent part
+        h_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.embed_dim).cuda())
+        c_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.embed_dim).cuda())
+        x, (h_n, c_n) = self.lstm1(x, (h_0, c_0))
+        x, _ = self.lstm2(x, (h_n, c_n))
         x = x[:, -1, :]
-        x = self.fc(x)
-        return x
+        pred = self.fc(x)
 
+        return pred
