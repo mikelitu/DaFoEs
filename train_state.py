@@ -79,12 +79,28 @@ def main():
     #Initialize the transformations
     # noise = augmentations.GaussianNoise(noise_factor = 0.25)
     
+    train_transform = augmentations.Compose([
+        augmentations.RandomHorizontalFlip(),
+        augmentations.RandomVerticalFlip(),
+        augmentations.ArrayToTensor(),
+        # noise
+    ]) if args.chua else augmentations.Compose([
+        augmentations.ArrayToTensor(),
+        # noise
+    ])
+
+    val_transform = augmentations.Compose([
+        augmentations.ArrayToTensor(),
+    ]) if args.chua else augmentations.Compose([
+        augmentations.SquareResize(),
+        augmentations.ArrayToTensor(),
+        # noise
+    ])
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = ZhongeChuaDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type, recurrency_size=1)
-    val_dataset = ZhongeChuaDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type, recurrency_size=1)
-
+    train_dataset = ZhongeChuaDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type, transform=train_transform) if args.chua else VisionStateDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type, recurrency_size=1, transform=train_transform)
+    val_dataset = ZhongeChuaDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type, transform=val_transform) if args.chua else VisionStateDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type, recurrency_size=1, transform=val_transform)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.chua else len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.chua else len(val_dataset.scenes)))
@@ -97,16 +113,10 @@ def main():
     )
 
     # Create the model
-    
-
-    if args.type == "v":
-        include_state = False
-    else:
-        include_state = True
 
     print("=> Creating the Linear Force Estimator model")
 
-    model = ForceEstimatorS(rs_size=25)
+    model = ForceEstimatorS(rs_size=26)
 
     model.to(device)
 
@@ -191,9 +201,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
             break
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
-        forces = data['forces'].view(-1, 3).to(device)
+        forces = data['forces'].to(device).view(-1, 3)
 
-        state = data['robot_state'].view(-1, 25).to(device)       
+        state = data['robot_state'].to(device).view(-1, 26)      
         pred_forces = model(state)
         mse_loss = mse(pred_forces, forces)
         # Add L1 regularization
@@ -245,9 +255,9 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
     logger.valid_bar.update(0)
 
     for i, data in enumerate(val_loader):
-        forces = data['forces'].view(-1, 3).to(device)
+        forces = data['forces'].to(device).view(-1, 3)
 
-        state = data['robot_state'].view(-1, 25).to(device)            
+        state = data['robot_state'].to(device).view(-1, 26)            
         pred_forces = model(state)
         loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
         losses.update([loss.item()])

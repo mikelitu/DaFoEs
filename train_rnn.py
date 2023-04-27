@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -43,6 +44,7 @@ parser.add_argument('--name', dest='name', type=str, required=True, help='name o
 parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='weight for rroot mean square error loss')
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness', "position"], default='random', type=str, help='training type for comparison')
+parser.add_argument('--num-layers', choices=[18, 50], default=50, help='number of resnet layers')
 parser.add_argument('--att-type', default=None, help='add attention blocks to the CNN')
 parser.add_argument('--chua', action='store_true')
 parser.add_argument('--include-depth', action='store_true')
@@ -52,7 +54,9 @@ n_iter = 0
 num_samples = 2000
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-torch.autograd.set_detect_anomaly(True) 
+torch.autograd.set_detect_anomaly(True)
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
 def main():
     global best_error, n_iter, device
@@ -246,12 +250,12 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
             break
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
-        img = data['img'].to(device)
+        imgs = [img.to(device) for img in data['img']]
         forces = data['forces'].to(device)
 
         if args.type == 'vs':
-            state = data['robot_state'].to(device)            
-            pred_forces = model(img, state)
+            state = data['robot_state'].to(device)           
+            pred_forces = model(imgs, state)
             mse_loss = mse(pred_forces, forces)
             # Add L1 regularization
             l1_norm = sum(p.abs().sum() for p in model.parameters())
@@ -264,7 +268,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
         else:
             state = None
             forces = forces if args.chua else forces.mean(axis=1)
-            pred_forces = model(img)
+            pred_forces = model(imgs)
             mse_loss = mse(pred_forces, forces)
 
             # Add L1 regularization

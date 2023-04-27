@@ -137,7 +137,7 @@ def main():
         cnn_model = ForceEstimatorV(num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type, include_depth=args.include_depth)
     else:
         include_state = True
-        cnn_model = ForceEstimatorVS(rs_size=25, num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type, include_depth=args.include_depth)
+        cnn_model = ForceEstimatorVS(rs_size=26, num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type, include_depth=args.include_depth)
 
     print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
 
@@ -227,8 +227,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cn
         forces = data['forces'].to(device)
 
         if args.type == 'vs':
-            state = data['robot_state'].to(device)            
-            pred_forces_cnn = cnn_predict_force_state(cnn_model, img, state.unsqueeze(1) if args.chua else state, forces.unsqueeze(1) if args.chua else forces)
+            state = data['robot_state'].to(device)
+            print(state.shape)           
+            pred_forces_cnn = cnn_predict_force_state(cnn_model, img, state, forces)
             mse_loss_cnn = mse(pred_forces_cnn, forces)
 
             l1_norm_cnn = sum(p.abs().sum() for p in cnn_model.parameters())        
@@ -240,7 +241,6 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cn
 
         else:
             state = None
-            forces = forces if args.chua else forces.mean(axis=1)
 
             pred_forces_cnn = cnn_predict_force_visu(cnn_model, img)
             mse_loss_cnn = mse(pred_forces_cnn, forces)
@@ -297,13 +297,12 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, cn
 
         if args.type == 'vs':
             state = data['robot_state'].to(device)            
-            cnn_pred_forces = cnn_predict_force_state(cnn_model, img, state.unsqueeze(1) if args.chua else state, forces.unsqueeze(1) if args.chua else forces)
+            cnn_pred_forces = cnn_predict_force_state(cnn_model, img, state, forces)
             cnn_loss = torch.sqrt(((forces - cnn_pred_forces) ** 2).mean())
             losses.update([cnn_loss.item()])
 
         else:
             state = None
-            forces = forces if args.chua else forces.mean(axis=1)
             cnn_pred_forces = cnn_predict_force_visu(cnn_model, img)
             cnn_loss = torch.sqrt(((forces - cnn_pred_forces) ** 2).mean())
             losses.update([cnn_loss.item()])
@@ -319,10 +318,8 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, cn
     return losses.avg, ['CNN Loss']
 
 def cnn_predict_force_state(model, images, state, forces):
-    preds_forces = torch.zeros(*forces.shape).to(device)
-    
     for i in range(state.shape[1]):
-        preds_forces[:, i, :] = model(images, state[:, i, :])
+        preds_forces = model(images, state[:, i, :])
     return preds_forces
 
 def cnn_predict_force_visu(model, images):
