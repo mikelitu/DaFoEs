@@ -266,15 +266,13 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
                 train_writer.add_scalar('Loss', loss.item(), n_iter)
 
         else:
-            state = None
-            forces = forces if args.chua else forces.mean(axis=1)
+            forces = forces
             pred_forces = model(imgs)
             mse_loss = mse(pred_forces, forces)
 
             # Add L1 regularization
             l1_norm = sum(p.abs().sum() for p in model.parameters())
             loss = w1 * mse_loss + l1_lambda * l1_norm
-
 
             if log_losses:
                 train_writer.add_scalar('MSE', mse_loss.item(), n_iter)
@@ -331,8 +329,7 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
             losses.update([loss.item()])
 
         else:
-            state = None
-            forces = forces if args.chua else forces.mean(axis=1)
+            forces = forces
             pred_forces = model(img)
             loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
             losses.update([loss.item()])
