@@ -280,17 +280,17 @@ class RecurrentCNN(nn.Module):
         x, (h_n, c_n) = self.lstm1(x, (h_0, c_0))
         x, _ = self.lstm2(x, (h_n, c_n))
         x = x[:, -1, :]
-        pred = self.fc(x)
+        x = self.fc(x)
 
-        return pred
+        return x
     
-    def recurrency(self, features):
-        batch_size = features.shape[0]
-        x = features
-        h_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).cuda())
-        c_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).cuda())
+    def recurrency(self, x):
+        batch_size = x.shape[0]
+        x = x
+        h_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).float().cuda())
+        c_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).float().cuda())
         x, (h_n, c_n) = self.lstm1(x, (h_0, c_0))
         # x, _ = self.lstm2(x, (h_n, c_n))
         x = x[:, -1, :]
-        pred = self.fc(x)
-        return pred
+        x = self.fc(x)
+        return x

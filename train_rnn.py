@@ -167,7 +167,7 @@ def main():
             include_rs=True
         )
 
-    model.to(device)
+    model.float().to(device)
 
     #Load parameters
     if args.pretrained:
@@ -250,11 +250,11 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
             break
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
-        imgs = [img.to(device) for img in data['img']]
-        forces = data['forces'].to(device)
+        imgs = [img.float().to(device) for img in data['img']]
+        forces = data['forces'].float().to(device)
 
         if args.type == 'vs':
-            state = data['robot_state'].to(device)           
+            state = data['robot_state'].float().to(device)           
             pred_forces = model(imgs, state)
             mse_loss = mse(pred_forces, forces)
             # Add L1 regularization
@@ -319,11 +319,11 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
     logger.valid_bar.update(0)
 
     for i, data in enumerate(val_loader):
-        img = data['img'].to(device)
-        forces = data['forces'].to(device)
+        img = [img.float().to(device) for img in data['img']]
+        forces = data['forces'].float().to(device)
 
         if args.type == 'vs':
-            state = data['robot_state'].to(device)            
+            state = data['robot_state'].float().to(device)            
             pred_forces = model(img, state)
             loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
             losses.update([loss.item()])
