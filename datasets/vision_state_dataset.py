@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import os
-from typing import Dict
+from typing import Dict, List
 
 from torch.utils.data import Dataset, DataLoader
 import imageio
@@ -110,7 +110,7 @@ class VisionStateDataset(Dataset):
         random.shuffle(samples)
         self.samples = samples
     
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, index: int) -> Dict[str, List[torch.Tensor]]:
         sample = self.samples[index]
         imgs = [load_as_float(img) for img in sample['img']]
         depths = [load_depth(depth) for depth in sample['depth']]
