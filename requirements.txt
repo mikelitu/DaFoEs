@@ -1,6 +1,7 @@
 numpy
 matplotlib
-torchvision
+torch==1.13.1
+torchvision==0.2.2
 imageio
 pillow < 7
 path
