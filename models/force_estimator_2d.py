@@ -250,15 +250,15 @@ class RecurrentCNN(nn.Module):
 
         self.encoder = ResnetEncoder(num_layers=num_layers, pretrained=pretrained, include_depth=include_depth, att_type=att_type)
         self.linear = nn.Linear(final_ch * 8 * 8, embed_dim)
-        self.lstm1 = nn.LSTM(input_size=embed_dim, hidden_size=embed_dim, num_layers=num_blocks, batch_first=True, dropout=0.)
-        self.lstm2 = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=True, dropout=0.)
+        self.lstm1 = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size, num_layers=num_blocks, batch_first=True, dropout=0.)
+        self.lstm2 = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, num_layers=num_blocks, batch_first=True, dropout=0.)
         self.fc = nn.Linear(hidden_size, 3)
     
     def forward(self, imgs: torch.Tensor, robot_state: torch.Tensor = None) -> torch.Tensor:
         batch_size = imgs[0].shape[0]
         rec_size = len(imgs)
 
-        x = torch.zeros(batch_size, rec_size, self.embed_dim) 
+        x = torch.zeros(batch_size, rec_size, self.embed_dim).float().cuda() 
 
         for i in range(batch_size):
             inp = torch.cat([img[i].unsqueeze(0) for img in imgs], dim=0)
@@ -275,11 +275,22 @@ class RecurrentCNN(nn.Module):
         x = x.reshape(batch_size, -1, self.embed_dim) # reshape the input in case there is a mismatch
 
         # recurrent part
-        h_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.embed_dim).cuda())
-        c_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.embed_dim).cuda())
+        h_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).float().cuda())
+        c_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).float().cuda())
         x, (h_n, c_n) = self.lstm1(x, (h_0, c_0))
         x, _ = self.lstm2(x, (h_n, c_n))
         x = x[:, -1, :]
         pred = self.fc(x)
 
+        return pred
+    
+    def recurrency(self, features):
+        batch_size = features.shape[0]
+        x = features
+        h_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).cuda())
+        c_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).cuda())
+        x, (h_n, c_n) = self.lstm1(x, (h_0, c_0))
+        # x, _ = self.lstm2(x, (h_n, c_n))
+        x = x[:, -1, :]
+        pred = self.fc(x)
         return pred
