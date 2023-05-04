@@ -99,8 +99,8 @@ def main():
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = ZhongeChuaDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type, transform=train_transform) if args.chua else VisionStateDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type, recurrency_size=1, transform=train_transform)
-    val_dataset = ZhongeChuaDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type, transform=val_transform) if args.chua else VisionStateDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type, recurrency_size=1, transform=val_transform)
+    train_dataset = ZhongeChuaDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type, transform=train_transform) if args.chua else VisionStateDataset(args.data, is_train=True, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, recurrency_size=1, transform=train_transform)
+    val_dataset = ZhongeChuaDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type, transform=val_transform) if args.chua else VisionStateDataset(args.data, is_train=False, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, recurrency_size=1, transform=val_transform)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.chua else len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.chua else len(val_dataset.scenes)))
