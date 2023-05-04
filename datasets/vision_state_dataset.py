@@ -79,7 +79,9 @@ class VisionStateDataset(Dataset):
         for scene in self.scenes:
             labels = np.array(pd.read_csv(scene/'labels.csv')).astype(np.float32)
             scene_rgb = scene/"RGB_frames"
-            scene_depth = scene/"Depth_frames"
+            if self.load_depths:
+                scene_depth = scene/"Depth_frames"
+                depth_maps = sorted(scene_depth.files("*.png"))
 
             #Appending mean and std for the normalization of the labels
             mean_labels.append(labels.mean(axis=0))
@@ -88,7 +90,7 @@ class VisionStateDataset(Dataset):
             std_forces.append((labels[:, -6:-3]).std(axis=0))
 
             images = sorted(scene_rgb.files("*.png"))
-            depth_maps = sorted(scene_depth.files("*.png"))
+            
             n_labels = len(labels) // len(images)
             step = 7
 
@@ -97,7 +99,9 @@ class VisionStateDataset(Dataset):
                 if i + self.recurrency_size > len(images) - 20: break
                 sample = {}
                 sample['img'] = [im for im in images[i:i+self.recurrency_size]]
-                sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
+                if self.load_depths:
+                    sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
+
                 sample['label'] = [np.mean(labels[n_labels*i+a: (n_labels*i+a) + step], axis=0) for a in range(self.recurrency_size)]
                 sample['forces'] = [np.mean(labels[n_labels*i+a:(n_labels*i+a) + step, -6:-3], axis=0) for a in range(self.recurrency_size)]
                 samples.append(sample)
@@ -113,8 +117,10 @@ class VisionStateDataset(Dataset):
     def __getitem__(self, index: int) -> Dict[str, List[torch.Tensor]]:
         sample = self.samples[index]
         imgs = [load_as_float(img) for img in sample['img']]
-        depths = [load_depth(depth) for depth in sample['depth']]
-
+        if self.load_depths:
+            depths = [load_depth(depth) for depth in sample['depth']]
+        else:
+            depths = None
         labels = sample['label']
         forces = sample['forces']
 
@@ -124,8 +130,11 @@ class VisionStateDataset(Dataset):
         norm_label = np.array([(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels])
         norm_force = np.array([(force - self.mean_forces) / (self.std_forces + 1e-10) for force in forces])
         
-        depths = [process_depth(depth) for depth in depths]
-        imgd = [torch.cat([img, depth], dim=0) for img, depth in zip(imgs, depths)]
+        if self.load_depths:
+            depths = [process_depth(depth) for depth in depths]
+            imgd = [torch.cat([img, depth], dim=0) for img, depth in zip(imgs, depths)]
+        else:
+            imgd = imgs
 
         return {'img': imgd[0] if self.recurrency_size==1 else imgd, 'robot_state': norm_label, 
                 'forces': np.mean(norm_force, axis=0)}
