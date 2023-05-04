@@ -62,7 +62,7 @@ def main():
 
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('chua' if args.chua else 'img2force', 'cnn-bam' if args.att_type is not None else 'cnn')/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}/{}'.format('chua' if args.chua else 'img2force', "rgbd" if args.include_depth else "rgb", 'cnn-bam' if args.att_type is not None else 'cnn')/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
