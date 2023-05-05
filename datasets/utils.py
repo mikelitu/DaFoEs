@@ -130,19 +130,21 @@ def reflect_joints(joints: np.ndarray, mode: str = 'horizontal'):
     
     return reflected_joints
 
-
-def RGBtoD(r, g, b):
+@torch.jit.script
+def RGBtoD(r, g, b) -> float:
     if (b + g + r < 255):
-        return 0
+        return 0.
     elif (r >= g) and (r >= b):
         if (g >= b):
-            return g - b
+            return float(g) - float(b)
         else:
-            return (float(g) - float(b)) + 1529
+            return (float(g) - float(b)) + 1529.
     elif (g >= r) and (g >= b):
-        return float(b) - float(r) + 510
+        return float(b) - float(r) + 510.
     elif (b >= g) and (b >= r):
-        return float(r) - float(g) + 1020
+        return float(r) - float(g) + 1020.
+    
+    return 0.
 
     
 

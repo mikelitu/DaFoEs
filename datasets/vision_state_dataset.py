@@ -30,7 +30,6 @@ def process_depth(rgb_depth: torch.Tensor) -> torch.Tensor:
     
     return (depth.float() - depth.mean()) / depth.std()
 
-
 class VisionStateDataset(Dataset):
     """A dataset to load data from dfferent folders that are arranged this way:
         root/scene_1/000.png
@@ -121,6 +120,7 @@ class VisionStateDataset(Dataset):
             depths = [load_depth(depth) for depth in sample['depth']]
         else:
             depths = None
+        
         labels = sample['label']
         forces = sample['forces']
 
@@ -151,5 +151,5 @@ if __name__ == "__main__":
     dataset = VisionStateDataset(root, transform=transforms, recurrency_size=3)
     np.save('labels_mean.npy', dataset.mean_labels)
     np.save('labels_std.npy', dataset.std_labels)
-    out = dataset[0]
-    print(out['forces'])
+    data = dataset[0]
+    
