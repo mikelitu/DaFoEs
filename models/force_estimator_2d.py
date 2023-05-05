@@ -129,7 +129,7 @@ class ForceEstimatorVS(nn.Module):
     def __init__(self, rs_size: int, num_layers: int = 18, pretrained: bool = True, include_depth: bool = True, att_type: str = None):
         super(ForceEstimatorVS, self).__init__()
 
-        self.encoder = ResnetEncoder(num_layers, pretrained, att_type=att_type)
+        self.encoder = ResnetEncoder(num_layers, pretrained, att_type=att_type, include_depth=include_depth)
 
         self.linear1 = FcBlock(2048 * 8 * 8, 512)
         self.linear2 = FcBlock(512 + rs_size, 84)
