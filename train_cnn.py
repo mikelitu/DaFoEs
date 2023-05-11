@@ -81,15 +81,18 @@ def main():
     #Initialize the transformations
     normalize = augmentations.Normalize(mean = [0.45, 0.45, 0.45],
                                         std = [0.225, 0.225, 0.225])
-    
+    bright = augmentations.BrightnessContrast(contrast=2.,
+                                              brightness=12.)
     # noise = augmentations.GaussianNoise(noise_factor = 0.25)
 
     train_transform = augmentations.Compose([
         augmentations.RandomHorizontalFlip(),
         augmentations.RandomVerticalFlip(),
+        augmentations.RandomRotation(),
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
+        bright,
         augmentations.ArrayToTensor(),
         normalize,
         # noise
@@ -104,6 +107,7 @@ def main():
     val_transform = augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
+        bright,
         augmentations.ArrayToTensor(),
         normalize
     ]) if args.chua else augmentations.Compose([

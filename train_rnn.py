@@ -51,7 +51,7 @@ parser.add_argument('--include-depth', action='store_true')
 
 best_error = -1
 n_iter = 0
-num_samples = 2000
+num_samples = 600
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.autograd.set_detect_anomaly(True)
@@ -83,15 +83,19 @@ def main():
     #Initialize the transformations
     normalize = augmentations.Normalize(mean = [0.45, 0.45, 0.45],
                                         std = [0.225, 0.225, 0.225])
+    bright = augmentations.BrightnessContrast(contrast=2.,
+                                              brightness=12.)
     
     # noise = augmentations.GaussianNoise(noise_factor = 0.25)
 
     train_transform = augmentations.Compose([
         augmentations.RandomHorizontalFlip(),
         augmentations.RandomVerticalFlip(),
+        augmentations.RandomRotation(),
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
+        bright,
         augmentations.ArrayToTensor(),
         normalize,
         # noise
@@ -108,6 +112,7 @@ def main():
     val_transform = augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
+        bright,
         augmentations.ArrayToTensor(),
         normalize
     ]) if args.chua else augmentations.Compose([
