@@ -3,9 +3,9 @@ import torch
 import random
 import numpy as np
 from PIL import Image
-from typing import List, Tuple
+from typing import Any, List, Tuple
 import torch.nn.functional as F
-from datasets.utils import get_reflection
+from datasets.utils import get_reflection, transform_state
 import cv2
 
 
@@ -95,6 +95,44 @@ class RandomVerticalFlip(object):
         
         return output_images, output_depths, reflected_states, reflected_forces
 
+
+class RandomRotation(object):
+
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> np.array:
+
+        if random.random() < 0.5:
+            angle = random.randint(-15, 15)
+            output_images = [np.array(Image.fromarray(im.astype(np.uint8)).rotate(angle)).astype(np.float32) for im in images]
+            if depths is not None:
+                output_depths = [np.array(Image.fromarray(depth.astype(np.uint16)).rotate(angle)).astype(np.float32) for depth in depths]
+            else:
+                output_depths = None
+            
+            if states is not None:
+                transformed_states, transformed_forces = transform_state(states, forces, angle)
+            else:
+                transformed_states = None
+                transformed_forces = None
+        
+        else:
+            output_images = images
+            output_depths = depths
+            transformed_states = states
+            transformed_forces = forces
+        
+        return output_images, output_depths, transformed_states, transformed_forces
+
+class BrightnessContrast(object):
+
+    def __init__(self, contrast: float, brightness: float):
+        self.alpha = contrast
+        self.beta = brightness
+    
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> np.ndarray:
+        adjusted_images = [cv2.convertScaleAbs(im, alpha=self.alpha, beta=self.beta) for im in images]
+
+        return adjusted_images, depths, states, forces
+        
 
 class RandomScaleCrop(object):
     """Randomly zooms images up to 15% and crop them to keep same size as before."""

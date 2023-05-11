@@ -58,21 +58,6 @@ def check_params(keys: List[str], params: List[str]):
 def generate_keys_rs() -> List[str]:
     return ["robot_pos", "joint_pos", "geo_com"]
 
-def _get_gaussian_kernel1d(kernel_size: int, sigma: float):
-        ksize_half = (kernel_size - 1) * 0.5
-
-        x = torch.linspace(-ksize_half, ksize_half, steps=kernel_size)
-        pdf = torch.exp(-0.5 * (x / sigma).pow(2))
-        kernel1d = pdf / pdf.sum()
-
-        return kernel1d
-    
-def _get_gaussian_kernel2d(kernel_size: Tuple[int], sigma: Tuple[float]) -> torch.Tensor:
-    kernel1d_x = _get_gaussian_kernel1d(kernel_size[0], sigma[0])
-    kernel1d_y = _get_gaussian_kernel1d(kernel_size[1], sigma[1])
-    kernel2d = torch.mm(kernel1d_y[:, None], kernel1d_x[None, :])
-    return kernel2d
-
 
 def get_reflection(states: List[np.ndarray], forces: List[np.ndarray], mode: str = 'horizontal'):
     assert mode in ['horizontal', 'vertical'], "The mode must be horizontal or vertical"
@@ -129,6 +114,52 @@ def reflect_joints(joints: np.ndarray, mode: str = 'horizontal'):
         reflected_joints[1] = -joints[1]
     
     return reflected_joints
+
+
+def transform_cartesian(position: np.ndarray, orientation: np.ndarray, T: np.ndarray):
+
+    rot_mat = R.from_quat(orientation).as_matrix()
+    transformed_rot_mat = T @ rot_mat
+    transformed_orientation = R.from_matrix(transformed_rot_mat).as_quat()
+
+    transformed_position = T @ position
+
+    return transformed_position, transformed_orientation
+
+def transform_joints(joints: np.ndarray, angle: int):
+    joints[3] += angle
+    return joints 
+
+def transform_state(states: List[np.ndarray], forces: List[np.ndarray], angle: int):
+    # Rotation around the Z axis to rotate the image coordinate system
+    T = np.ndarray([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
+
+    robot_position = [state[:3] for state in states]
+    robot_orientation = [state[3:7] for state in states]
+    robot_joints = [state[7:13] for state in states]
+
+    # Command state
+    haptic_position = [state[13:16] for state in states]
+    haptic_orientation = [state[16:20] for state in states]
+    haptic_joints = [state[20:26] for state in states]
+
+    transformed_states, transformed_forces = [], []
+
+    for (r_pos, r_or, r_joint, h_pos, h_or, h_joint, f) in zip(robot_position, robot_orientation, robot_joints,
+                                                               haptic_position, haptic_orientation, haptic_joints,
+                                                               forces):
+        
+        transformed_r_pos, transformed_r_or = transform_cartesian(r_pos, r_or, T)
+        transformed_r_joints = transform_joints(r_joint, angle)
+        transformed_r_state = np.append(np.append(transformed_r_pos, transformed_r_or), transformed_r_joints)
+        transformed_h_pos, transformed_h_or = transform_cartesian(h_pos, h_or, T)
+        transformed_h_joints = transform_joints(h_joint, angle)
+        transformed_h_state = np.append(np.append(transformed_h_pos, transformed_h_or), transformed_h_joints)
+        transformed_state = np.append(transformed_r_state, transformed_h_state)
+        transformed_states.append(transformed_state)
+        transformed_forces.append(T @ f)
+
+    return transformed_states, transformed_forces
 
 @torch.jit.script
 def RGBtoD(r, g, b) -> float:

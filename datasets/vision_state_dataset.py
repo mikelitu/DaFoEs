@@ -11,7 +11,8 @@ from path import Path
 import pandas as pd
 from PIL import ImageFile, Image
 from datasets.utils import RGBtoD
-from datasets.augmentations import ArrayToTensor, Compose, Normalize, RandomHorizontalFlip, RandomVerticalFlip, SquareResize
+from datasets.augmentations import BrightnessContrast, Compose
+import matplotlib.pyplot as plt
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -144,12 +145,14 @@ class VisionStateDataset(Dataset):
 
 if __name__ == "__main__":
     root = '/home/md21local/visu_depth_haptic_data'
-    normalize = Normalize(mean = [0.45, 0.45, 0.45],
-                          std = [0.225, 0.225, 0.225])
     
-    transforms = Compose([RandomVerticalFlip(), SquareResize(), ArrayToTensor(), normalize])
-    dataset = VisionStateDataset(root, transform=transforms, recurrency_size=3)
+    brightcont = BrightnessContrast(contrast=2., brightness=12.)
+    transforms = Compose([brightcont])
+    dataset = VisionStateDataset(root, transform=transforms, recurrency_size=1, load_depths=False)
     np.save('labels_mean.npy', dataset.mean_labels)
     np.save('labels_std.npy', dataset.std_labels)
-    data = dataset[0]
+    data = dataset[15]
+
+    plt.imshow(data['img'])
+    plt.show()
     
