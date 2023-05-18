@@ -71,6 +71,8 @@ class ResnetEncoder(nn.Module):
         super(ResnetEncoder, self).__init__()
 
         self.att_type = att_type
+        self.gradients = None
+
 
         self.num_ch_enc = np.array([64, 64, 128, 256, 512])
 
@@ -93,7 +95,7 @@ class ResnetEncoder(nn.Module):
         if num_layers > 34:
             self.num_ch_enc[1:] *= 4
         
-    def forward(self, input_image):
+    def forward(self, input_image: torch.Tensor):
         x = input_image
 
         x = self.encoder.conv1(x)
@@ -139,9 +141,13 @@ class ForceEstimatorVS(nn.Module):
 
         # self.apply(self._init_weights)
     
-    def forward(self, x, robot_state=None):
+    def forward(self, x: torch.Tensor, robot_state: torch.Tensor = None):
 
         out = self.encoder(x)
+
+        # Register the hook
+        # h = out.register_hook(self.activations_hooks)
+
         out_flatten = out.view(out.shape[0], -1)
         out = self.linear1(out_flatten)
         out = torch.cat([out, robot_state], dim=1)
@@ -159,6 +165,16 @@ class ForceEstimatorVS(nn.Module):
         
         elif isinstance(module, nn.Conv2d):
             nn.init.normal_(module.weight.data, 0.0, 0.02)
+    
+    def activations_hooks(self, grad):
+        self.gradients = grad
+    
+    def get_activations_gradient(self):
+        return self.gradients
+    
+    def get_activations(self, x):
+        return self.encoder(x)
+
 
 class ForceEstimatorV(nn.Module):
     """
@@ -175,8 +191,12 @@ class ForceEstimatorV(nn.Module):
 
         # self.apply(self._init_weights)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         out = self.encoder(x)
+
+        # Register the hook
+        # h = out.register_hook(self.activations_hooks)
+
         out_flatten = out.view(out.shape[0], -1)
         out = self.linear1(out_flatten)
         out = self.final(out)
@@ -191,6 +211,15 @@ class ForceEstimatorV(nn.Module):
         
         elif isinstance(module, nn.Conv2d):
             nn.init.normal_(module.weight.data, 0.0, 0.02)
+    
+    def activations_hooks(self, grad):
+        self.gradients = grad
+    
+    def get_activations_gradient(self):
+        return self.gradients
+    
+    def get_activations(self, x):
+        return self.encoder(x)
 
 
 class ForceEstimatorS(nn.Module):
