@@ -92,13 +92,18 @@ def main():
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
-        bright,
+        # bright,
         augmentations.ArrayToTensor(),
         normalize,
         # noise
     ]) if args.chua else augmentations.Compose([
+        augmentations.RandomHorizontalFlip(),
+        augmentations.RandomVerticalFlip(),
+        augmentations.RandomRotation(),
+        augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
+        bright,
         augmentations.ArrayToTensor(),
         normalize,
         # noise
@@ -107,11 +112,13 @@ def main():
     val_transform = augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
-        bright,
+        #bright,
         augmentations.ArrayToTensor(),
         normalize
     ]) if args.chua else augmentations.Compose([
+        augmentations.CentreCrop(),
         augmentations.SquareResize(),
+        bright,
         augmentations.ArrayToTensor(),
         normalize,
         # noise
@@ -120,8 +127,8 @@ def main():
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = ZhongeChuaDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=True, transform=train_transform, load_depths=args.include_depth, seed=args.seed, train_type=args.train_type, recurrency_size=1)
-    val_dataset = ZhongeChuaDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, recurrency_size=1)
+    train_dataset = ZhongeChuaDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=1) if args.chua else VisionStateDataset(args.data, is_train=True, transform=train_transform, load_depths=args.include_depth, seed=args.seed, train_type=args.train_type, recurrency_size=1)
+    val_dataset = ZhongeChuaDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=1) if args.chua else VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, recurrency_size=1)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.chua else len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.chua else len(val_dataset.scenes)))
@@ -141,7 +148,7 @@ def main():
         cnn_model = ForceEstimatorV(num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type, include_depth=args.include_depth)
     else:
         include_state = True
-        cnn_model = ForceEstimatorVS(rs_size=26, num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type, include_depth=args.include_depth)
+        cnn_model = ForceEstimatorVS(rs_size=54 if args.chua else 26, num_layers=args.num_layers, pretrained=pretrained, att_type=args.att_type, include_depth=args.include_depth)
 
     print("=> Creating the {} transformer...".format("vision & state" if include_state else "vision"))
 
@@ -228,12 +235,11 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cn
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
         img = data['img'].to(device)
-        forces = data['forces'].to(device)
+        forces = data['forces'].to(device).view(-1, 3).float()
 
         if args.type == 'vs':
-            state = data['robot_state'].to(device)
-            print(state.shape)           
-            pred_forces_cnn = cnn_predict_force_state(cnn_model, img, state, forces)
+            state = data['robot_state'].to(device).view(-1, 54 if args.chua else 26).float()        
+            pred_forces_cnn = cnn_model(img, state)
             mse_loss_cnn = mse(pred_forces_cnn, forces)
 
             l1_norm_cnn = sum(p.abs().sum() for p in cnn_model.parameters())        
@@ -246,7 +252,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, cn
         else:
             state = None
 
-            pred_forces_cnn = cnn_predict_force_visu(cnn_model, img)
+            pred_forces_cnn = cnn_model(img)
             mse_loss_cnn = mse(pred_forces_cnn, forces)
             l1_norm_cnn = sum(p.abs().sum() for p in cnn_model.parameters())        
             loss_cnn = w1 * mse_loss_cnn + l1_lambda * l1_norm_cnn
@@ -297,17 +303,17 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, cn
 
     for i, data in enumerate(val_loader):
         img = data['img'].to(device)
-        forces = data['forces'].to(device)
+        forces = data['forces'].to(device).view(-1, 3).float()
 
         if args.type == 'vs':
-            state = data['robot_state'].to(device)            
-            cnn_pred_forces = cnn_predict_force_state(cnn_model, img, state, forces)
+            state = data['robot_state'].to(device).view(-1, 54 if args.chua else 26).float()           
+            cnn_pred_forces = cnn_model(img, state)
             cnn_loss = torch.sqrt(((forces - cnn_pred_forces) ** 2).mean())
             losses.update([cnn_loss.item()])
 
         else:
             state = None
-            cnn_pred_forces = cnn_predict_force_visu(cnn_model, img)
+            cnn_pred_forces = cnn_model(img)
             cnn_loss = torch.sqrt(((forces - cnn_pred_forces) ** 2).mean())
             losses.update([cnn_loss.item()])
         
@@ -320,17 +326,6 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, cn
     
     logger.valid_bar.update(len(val_loader))
     return losses.avg, ['CNN Loss']
-
-def cnn_predict_force_state(model, images, state, forces):
-    for i in range(state.shape[1]):
-        preds_forces = model(images, state[:, i, :])
-    return preds_forces
-
-def cnn_predict_force_visu(model, images):
-
-    pred_forces = model(images)
-    
-    return pred_forces
 
     
 if __name__ == "__main__":

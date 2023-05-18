@@ -11,7 +11,7 @@ import time
 import csv
 import numpy as np
 from datasets import augmentations
-from utils import save_checkpoint
+from utils import save_checkpoint, none_or_str
 from tensorboardX import SummaryWriter
 from path import Path
 from logger import TermLogger, AverageMeter
@@ -47,6 +47,7 @@ parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='wei
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness', "position"], default='random', type=str, help='training type for comparison')
 parser.add_argument('--chua', action='store_true')
 parser.add_argument('--include-depth', action='store_true')
+parser.add_argument('--occlude-param', type=str, help="parameter to occlude during training")
 
 best_error = -1
 n_iter = 0
@@ -59,9 +60,10 @@ def main():
     global best_error, n_iter, device
     args = parser.parse_args()
 
+    args.occlude_param = none_or_str(args.occlude_param)
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('chua' if args.chua else 'img2force', 'fc')/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}/{}'.format('chua' if args.chua else 'img2force', 'fc', args.occlude_param if args.occlude_param is not None else "complete")/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -87,6 +89,9 @@ def main():
         augmentations.ArrayToTensor(),
         # noise
     ]) if args.chua else augmentations.Compose([
+        augmentations.RandomHorizontalFlip(),
+        augmentations.RandomVerticalFlip(),
+        augmentations.RandomRotation(),
         augmentations.ArrayToTensor(),
         # noise
     ])
@@ -101,8 +106,8 @@ def main():
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = ZhongeChuaDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type, transform=train_transform) if args.chua else VisionStateDataset(args.data, is_train=True, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, recurrency_size=1, transform=train_transform)
-    val_dataset = ZhongeChuaDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type, transform=val_transform) if args.chua else VisionStateDataset(args.data, is_train=False, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, recurrency_size=1, transform=val_transform)
+    train_dataset = ZhongeChuaDataset(args.data, is_train=True, seed=args.seed, train_type=args.train_type, transform=train_transform, recurrency_size=1) if args.chua else VisionStateDataset(args.data, is_train=True, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, recurrency_size=1, transform=train_transform, occlude_param=args.occlude_param)
+    val_dataset = ZhongeChuaDataset(args.data, is_train=False, seed=args.seed, train_type=args.train_type, transform=val_transform, recurrency_size=1) if args.chua else VisionStateDataset(args.data, is_train=False, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, recurrency_size=1, transform=val_transform, occlude_param=args.occlude_param)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.chua else len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.chua else len(val_dataset.scenes)))
@@ -118,7 +123,7 @@ def main():
 
     print("=> Creating the Linear Force Estimator model")
 
-    model = ForceEstimatorS(rs_size=26)
+    model = ForceEstimatorS(rs_size=54 if args.chua else 26)
 
     model.to(device)
 
@@ -203,9 +208,9 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
             break
         log_losses = i > 0 and n_iter % args.print_freq == 0
         data_time.update(time.time() - end)
-        forces = data['forces'].to(device).view(-1, 3)
+        forces = data['forces'].to(device).view(-1, 3).float()
 
-        state = data['robot_state'].to(device).view(-1, 26)      
+        state = data['robot_state'].to(device).view(-1, 54 if args.chua else 26).float()       
         pred_forces = model(state)
         mse_loss = mse(pred_forces, forces)
         # Add L1 regularization
@@ -257,9 +262,9 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
     logger.valid_bar.update(0)
 
     for i, data in enumerate(val_loader):
-        forces = data['forces'].to(device).view(-1, 3)
+        forces = data['forces'].to(device).view(-1, 3).float()
 
-        state = data['robot_state'].to(device).view(-1, 26)            
+        state = data['robot_state'].to(device).view(-1, 54 if args.chua else 26).float()            
         pred_forces = model(state)
         loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
         losses.update([loss.item()])

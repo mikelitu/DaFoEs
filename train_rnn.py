@@ -12,7 +12,7 @@ import time
 import csv
 import numpy as np
 from datasets import augmentations
-from utils import save_checkpoint
+from utils import save_checkpoint, none_or_str
 from tensorboardX import SummaryWriter
 from path import Path
 from logger import TermLogger, AverageMeter
@@ -48,6 +48,7 @@ parser.add_argument('--num-layers', choices=[18, 50], default=50, help='number o
 parser.add_argument('--att-type', default=None, help='add attention blocks to the CNN')
 parser.add_argument('--chua', action='store_true')
 parser.add_argument('--include-depth', action='store_true')
+parser.add_argument('--occlude-param', type=str, help="Parameter to hide from the training")
 
 best_error = -1
 n_iter = 0
@@ -59,12 +60,15 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
 def main():
+    
     global best_error, n_iter, device
     args = parser.parse_args()
 
+    args.occlude_param = none_or_str(args.occlude_param)
+
     timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
     save_path = Path(args.name)
-    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}/{}'.format('chua' if args.chua else 'img2force', "rgbd" if args.include_depth else "rgb", 'rnn-bam' if args.att_type is not None else 'rnn')/save_path/timestamp
+    args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}/{}/{}'.format('chua' if args.chua else 'img2force', "rgbd" if args.include_depth else "rgb", 'rnn-bam' if args.att_type is not None else 'rnn', args.occlude_param if args.occlude_param is not None else "complete")/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -95,15 +99,18 @@ def main():
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
-        bright,
+        # bright,
         augmentations.ArrayToTensor(),
         normalize,
         # noise
     ]) if args.chua else augmentations.Compose([
         augmentations.RandomHorizontalFlip(),
         augmentations.RandomVerticalFlip(),
+        augmentations.RandomRotation(),
+        augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.RandomScaleCrop(),
+        bright,
         augmentations.ArrayToTensor(),
         normalize,
         # noise
@@ -112,7 +119,6 @@ def main():
     val_transform = augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
-        bright,
         augmentations.ArrayToTensor(),
         normalize
     ]) if args.chua else augmentations.Compose([
@@ -125,8 +131,8 @@ def main():
     print("=> Getting scenes from '{}'".format(args.data))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = ZhongeChuaDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=True, transform=train_transform, load_depths=args.include_depth, seed=args.seed, train_type=args.train_type)
-    val_dataset = ZhongeChuaDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type)
+    train_dataset = ZhongeChuaDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=True, transform=train_transform, load_depths=args.include_depth, seed=args.seed, train_type=args.train_type, occlude_param=args.occlude_param)
+    val_dataset = ZhongeChuaDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type) if args.chua else VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, load_depths=args.include_depth, train_type=args.train_type, occlude_param=args.occlude_param)
 
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.chua else len(train_dataset.scenes)))
