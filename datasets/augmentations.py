@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 from typing import Any, List, Tuple
 import torch.nn.functional as F
-from datasets.utils import get_reflection, transform_state
+from datasets.utils import get_reflection, transform_state, get_reflection_chua, transform_state_chua
 import cv2
 
 
@@ -17,9 +17,9 @@ class Compose(object):
     def __init__(self, transforms: object):
         self.transforms = transforms
 
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> List[torch.Tensor]:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> List[torch.Tensor]:
         for t in self.transforms:
-            images, depths, states, forces = t(images, depths, states, forces)
+            images, depths, states, forces = t(images, depths, states, forces, model)
         return images, depths, states, forces
 
 
@@ -28,7 +28,7 @@ class Normalize(object):
         self.mean = mean
         self.std = std
 
-    def __call__(self, images: List[torch.Tensor], depths: List[torch.Tensor] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> List[torch.Tensor]:
+    def __call__(self, images: List[torch.Tensor], depths: List[torch.Tensor] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> List[torch.Tensor]:
         for t, m, s in zip(images, self.mean, self.std):
             t.sub_(m).div_(s)
         return images, depths, states, forces
@@ -37,7 +37,7 @@ class Normalize(object):
 class ArrayToTensor(object):
     """Converts a list of numpy.ndarray (H x W x C) along with a intrinsics matrix to a list of torch.FloatTensor of shape (C x H x W) with a intrinsics tensor."""
 
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> List[torch.Tensor]:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> List[torch.Tensor]:
         # put it from HWC to CHW format
         images = [np.transpose(im, (2, 0, 1)) for im in images]
         if depths is not None:
@@ -53,7 +53,7 @@ class ArrayToTensor(object):
 
 class RandomHorizontalFlip(object):
 
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> np.ndarray:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> np.ndarray:
         
         if random.random() < 0.5:
             output_images = [np.copy(np.fliplr(img)) for img in images]
@@ -63,7 +63,7 @@ class RandomHorizontalFlip(object):
                 output_depths = None
 
             if states is not None:
-                reflected_states, reflected_forces = get_reflection(states, forces, mode='horizontal')
+                reflected_states, reflected_forces = get_reflection_chua(states, forces, mode='horizontal') if model=="chua" else get_reflection(states, forces, mode="horizontal")
         else:
             output_images = images
             output_depths = depths
@@ -75,7 +75,7 @@ class RandomHorizontalFlip(object):
 
 class RandomVerticalFlip(object):
 
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> np.ndarray:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> np.ndarray:
         
         if random.random() < 0.5:
             output_images = [np.copy(np.flipud(img)) for img in images]
@@ -86,7 +86,7 @@ class RandomVerticalFlip(object):
                 output_depths = None
             
             if states is not None:
-                reflected_states, reflected_forces = get_reflection(states, forces, mode='vertical')
+                reflected_states, reflected_forces = get_reflection_chua(states, forces, mode='vertical') if model=="chua" else get_reflection(states, forces, mode="vertical")
         else:
             output_images = images
             output_depths = depths
@@ -98,18 +98,19 @@ class RandomVerticalFlip(object):
 
 class RandomRotation(object):
 
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> np.array:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> np.array:
 
         if random.random() < 0.5:
             angle = random.randint(-15, 15)
             output_images = [np.array(Image.fromarray(im.astype(np.uint8)).rotate(angle)).astype(np.float32) for im in images]
             if depths is not None:
-                output_depths = [np.array(Image.fromarray(depth.astype(np.uint16)).rotate(angle)).astype(np.float32) for depth in depths]
+                M = cv2.getRotationMatrix2D((depths[0].shape[0]/2, depths[0].shape[1]/2), angle, 1)
+                output_depths = [cv2.warpAffine(depth.astype(np.uint16), M, (depth.shape[0], depth.shape[1])).astype(np.float32) for depth in depths]
             else:
                 output_depths = None
             
             if states is not None:
-                transformed_states, transformed_forces = transform_state(states, forces, angle)
+                transformed_states, transformed_forces = transform_state_chua(states, forces, angle) if model=="chua" else transform_state(states, forces, angle)
             else:
                 transformed_states = None
                 transformed_forces = None
@@ -128,7 +129,7 @@ class BrightnessContrast(object):
         self.alpha = contrast
         self.beta = brightness
     
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> np.ndarray:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> np.ndarray:
         adjusted_images = [cv2.convertScaleAbs(im, alpha=self.alpha, beta=self.beta) for im in images]
 
         return adjusted_images, depths, states, forces
@@ -137,7 +138,7 @@ class BrightnessContrast(object):
 class RandomScaleCrop(object):
     """Randomly zooms images up to 15% and crop them to keep same size as before."""
 
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> np.ndarray:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> np.ndarray:
 
         in_h, in_w, _ = images[0].shape
         x_scaling, y_scaling = np.random.uniform(1, 1.15, 2)
@@ -163,7 +164,7 @@ class RandomScaleCrop(object):
         return cropped_images, cropped_depths, states, forces
 
 class CentreCrop(object):
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> List[np.ndarray]:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> List[np.ndarray]:
     
         in_h, in_w, _ = images[0].shape
         c_h, c_w = in_h // 2 , in_w // 2
@@ -178,7 +179,7 @@ class CentreCrop(object):
 
 class SquareResize(object):
     """Resize the image to a square of 256x256"""
-    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None) -> List[np.ndarray]:
+    def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> List[np.ndarray]:
 
         new_size = (256, 256)
         scaled_images = [np.array(Image.fromarray(im.astype(np.uint8)).resize(new_size)).astype(np.float32) for im in images]

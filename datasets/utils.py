@@ -2,6 +2,7 @@ import torch
 from typing import List, Tuple
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
 
 def quaternion_rotation_matrix(Q):
     """
@@ -58,6 +59,57 @@ def check_params(keys: List[str], params: List[str]):
 def generate_keys_rs() -> List[str]:
     return ["robot_pos", "joint_pos", "geo_com"]
 
+def get_reflection_chua(states: List[np.ndarray], forces: List[np.ndarray], mode: str = "horizontal"):
+    assert mode in ['horizontal', 'vertical'], "The mode must be horizontal or vertical"
+    if mode == 'horizontal':
+        T = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    else:
+        T = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
+
+    sensor_forces = [state[:3] for state in states]
+    sensor_torque = [state[3:6] for state in states]
+
+    robot_position = [state[6:9] for state in states]
+    robot_orientation = [state[9:13] for state in states]
+    robot_velocity = [state[13:16] for state in states]
+    robot_angular = [state[16:19] for state in states]
+
+    joint_angle = [state[19:26] for state in states]
+    joint_velocity = [state[26:33] for state in states]
+    joint_torque = [state[33:40] for state in states]
+
+    desired_joint_angle = [state[40:47] for state in states]
+    desired_joint_torque = [state[47:54] for state in states]
+
+    reflected_states, reflected_forces = [], []
+
+    for (s_f, s_t, r_p, r_o, r_v, r_w, j_a, j_v, j_t, d_j_a, d_j_t, f) in zip(sensor_forces, sensor_torque, robot_position,
+                                                                           robot_orientation, robot_velocity, robot_angular,
+                                                                           joint_angle, joint_velocity, joint_torque,
+                                                                           desired_joint_angle, desired_joint_torque, forces):
+        reflected_sensor_force = T @ s_f
+        reflected_sensor_torque = T @ s_t
+        reflected_sensor = np.append(reflected_sensor_force, reflected_sensor_torque)
+        reflected_robot_pos, reflected_robot_or = reflect_cartesian(r_p, r_o, T)
+        reflected_robot_velocity = T @ r_v
+        reflected_robot_angular = T @ r_w
+        reflected_robot = np.append(reflected_robot_pos, np.append(reflected_robot_or, np.append(reflected_robot_velocity, reflected_robot_angular)))
+        reflected_sensor_robot = np.append(reflected_sensor, reflected_robot)
+
+        reflected_joint_angle = reflect_joints(j_a, mode)
+        reflected_joints_velocity = reflect_joints(j_v, mode)
+        reflected_joint_torque = reflect_joints(j_t, mode)
+        reflected_joints = np.append(reflected_joint_angle, np.append(reflected_joints_velocity, reflected_joint_torque))
+
+        reflected_desired_joint_angle = reflect_joints(d_j_a, mode)
+        reflected_desired_joint_torque = reflect_joints(d_j_t, mode)
+        reflected_desired_joints = np.append(reflected_desired_joint_angle, reflected_desired_joint_torque)
+
+        reflected_state = np.append(reflected_sensor_robot, np.append(reflected_joints, reflected_desired_joints))
+        reflected_states.append(reflected_state)
+        reflected_forces.append(T @ f)
+    
+    return reflected_states, reflected_forces
 
 def get_reflection(states: List[np.ndarray], forces: List[np.ndarray], mode: str = 'horizontal'):
     assert mode in ['horizontal', 'vertical'], "The mode must be horizontal or vertical"
@@ -68,11 +120,13 @@ def get_reflection(states: List[np.ndarray], forces: List[np.ndarray], mode: str
         T = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
     
     # Robot state
+
     robot_position = [state[:3] for state in states]
     robot_orientation = [state[3:7] for state in states]
     robot_joints = [state[7:13] for state in states]
 
     # Command state
+
     haptic_position = [state[13:16] for state in states]
     haptic_orientation = [state[16:20] for state in states]
     haptic_joints = [state[20:26] for state in states]
@@ -132,7 +186,7 @@ def transform_joints(joints: np.ndarray, angle: int):
 
 def transform_state(states: List[np.ndarray], forces: List[np.ndarray], angle: int):
     # Rotation around the Z axis to rotate the image coordinate system
-    T = np.ndarray([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
+    T = np.array([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
 
     robot_position = [state[:3] for state in states]
     robot_orientation = [state[3:7] for state in states]
@@ -161,6 +215,57 @@ def transform_state(states: List[np.ndarray], forces: List[np.ndarray], angle: i
 
     return transformed_states, transformed_forces
 
+
+def transform_state_chua(states: List[np.ndarray], forces: List[np.ndarray], angle: int):
+
+    T = np.array([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
+    
+    sensor_forces = [state[:3] for state in states]
+    sensor_torque = [state[3:6] for state in states]
+
+    robot_position = [state[6:9] for state in states]
+    robot_orientation = [state[9:13] for state in states]
+    robot_velocity = [state[13:16] for state in states]
+    robot_angular = [state[16:19] for state in states]
+
+    joint_angle = [state[19:26] for state in states]
+    joint_velocity = [state[26:33] for state in states]
+    joint_torque = [state[33:40] for state in states]
+
+    desired_joint_angle = [state[40:47] for state in states]
+    desired_joint_torque = [state[47:54] for state in states]
+
+    transformed_states, transformed_forces = [], []
+
+    for (s_f, s_t, r_p, r_o, r_v, r_w, j_a, j_v, j_t, d_j_a, d_j_t, f) in zip(sensor_forces, sensor_torque, robot_position,
+                                                                           robot_orientation, robot_velocity, robot_angular,
+                                                                           joint_angle, joint_velocity, joint_torque,
+                                                                           desired_joint_angle, desired_joint_torque, forces):
+        transformed_sensor_force = T @ s_f
+        transformed_sensor_torque = T @ s_t
+        transformed_sensor = np.append(transformed_sensor_force, transformed_sensor_torque)
+        transformed_robot_pos, transformed_robot_or = transform_cartesian(r_p, r_o, T)
+        transformed_robot_velocity = T @ r_v
+        transformed_robot_angular = T @ r_w
+        transformed_robot = np.append(transformed_robot_pos, np.append(transformed_robot_or, np.append(transformed_robot_velocity, transformed_robot_angular)))
+        transformed_sensor_robot = np.append(transformed_sensor, transformed_robot)
+
+        transformed_joint_angle = transform_joints(j_a, angle)
+        transformed_joints_velocity = transform_joints(j_v, angle)
+        transformed_joint_torque = transform_joints(j_t, angle)
+        transformed_joints = np.append(transformed_joint_angle, np.append(transformed_joints_velocity, transformed_joint_torque))
+
+        transformed_desired_joint_angle = transform_joints(d_j_a, angle)
+        transformed_desired_joint_torque = transform_joints(d_j_t, angle)
+        transformed_desired_joints = np.append(transformed_desired_joint_angle, transformed_desired_joint_torque)
+
+        transformed_state = np.append(transformed_sensor_robot, np.append(transformed_joints, transformed_desired_joints))
+        transformed_states.append(transformed_state)
+        transformed_forces.append(T @ f)
+    
+    return transformed_states, transformed_forces
+
+
 @torch.jit.script
 def RGBtoD(r, g, b) -> float:
     if (b + g + r < 255):
@@ -177,6 +282,13 @@ def RGBtoD(r, g, b) -> float:
     
     return 0.
 
+def plot_forces(forces):
+    fig = plt.figure(figsize=(10, 5))
+    plt.plot(forces[:, 0])
+    plt.plot(forces[:, 1])
+    plt.plot(forces[:, 2])
+    plt.pause(1.0)
+    plt.close()
     
 
     

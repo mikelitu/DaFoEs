@@ -13,6 +13,7 @@ from PIL import ImageFile, Image
 from datasets.utils import RGBtoD
 from datasets.augmentations import BrightnessContrast, Compose
 import matplotlib.pyplot as plt
+from datasets.utils import plot_forces
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -42,11 +43,18 @@ class VisionStateDataset(Dataset):
         transform functions takes in a list images and a numpy array representing the intrinsics of the camera and the robot state
     """
 
-    def __init__(self, root, recurrency_size=5, load_depths=True, max_depth=25., is_train=True, transform=None, seed=0, train_type="random"):
+    def __init__(self, root, recurrency_size=5, load_depths=True, max_depth=25., is_train=True, transform=None, seed=0, train_type="random",
+                 occlude_param=None):
+        
         np.random.seed(seed)
         random.seed(seed)
         self.root = Path(root)
 
+        self.occlusion = {"robot_p": [0, 7],
+                          "robot_j": [7, 13],
+                          "haptics_p": [13, 20],
+                          "haptics_j": [20, 26]}
+        
         train_files = {"random": "train.txt", 
                     "geometry": "train_geometry.txt", 
                     "color": "train_color.txt", 
@@ -64,9 +72,11 @@ class VisionStateDataset(Dataset):
         scene_list_path = self.root/train_files[train_type] if is_train else self.root/val_files[train_type]
         self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)][:-1]
         self.transform = transform
+        self.is_train = is_train
         self.load_depths = load_depths
         self.max_depth = max_depth
         self.recurrency_size = recurrency_size
+        self.occlude_param = occlude_param
         self.crawl_folders()
         
         
@@ -78,6 +88,7 @@ class VisionStateDataset(Dataset):
 
         for scene in self.scenes:
             labels = np.array(pd.read_csv(scene/'labels.csv')).astype(np.float32)
+            # plot_forces(labels[140:, 0:3])
             scene_rgb = scene/"RGB_frames"
             if self.load_depths:
                 scene_depth = scene/"Depth_frames"
@@ -103,7 +114,7 @@ class VisionStateDataset(Dataset):
                     sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
 
                 sample['label'] = [np.mean(labels[n_labels*i+a: (n_labels*i+a) + step], axis=0) for a in range(self.recurrency_size)]
-                sample['forces'] = [np.mean(labels[n_labels*i+a:(n_labels*i+a) + step, -6:-3], axis=0) for a in range(self.recurrency_size)]
+                sample['forces'] = [np.mean(labels[n_labels*i+a:(n_labels*i+a) + step, 26:29], axis=0) for a in range(self.recurrency_size)]
                 samples.append(sample)
         
         self.mean_labels = np.mean(mean_labels, axis = 0) 
@@ -129,6 +140,11 @@ class VisionStateDataset(Dataset):
             imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces)
         
         norm_label = np.array([(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels])
+
+        if self.occlude_param is not None and self.is_train:
+            start, end = self.occlusion[self.occlude_param]
+            norm_label[:, start:end] = 0.
+
         norm_force = np.array([(force - self.mean_forces) / (self.std_forces + 1e-10) for force in forces])
         
         if self.load_depths:
@@ -148,11 +164,10 @@ if __name__ == "__main__":
     
     brightcont = BrightnessContrast(contrast=2., brightness=12.)
     transforms = Compose([brightcont])
-    dataset = VisionStateDataset(root, transform=transforms, recurrency_size=1, load_depths=False)
+    dataset = VisionStateDataset(root, transform=transforms, recurrency_size=1, load_depths=False, occlude_param="haptics_p")
     np.save('labels_mean.npy', dataset.mean_labels)
     np.save('labels_std.npy', dataset.std_labels)
-    data = dataset[15]
+    data = dataset[10]
 
-    plt.imshow(data['img'])
-    plt.show()
+    print(data['forces'])
     
