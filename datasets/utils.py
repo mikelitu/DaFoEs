@@ -81,12 +81,12 @@ def get_reflection_chua(states: List[np.ndarray], forces: List[np.ndarray], mode
     desired_joint_angle = [state[40:47] for state in states]
     desired_joint_torque = [state[47:54] for state in states]
 
-    reflected_states, reflected_forces = [], []
+    reflected_states, reflected_forces = [], T @ forces
 
-    for (s_f, s_t, r_p, r_o, r_v, r_w, j_a, j_v, j_t, d_j_a, d_j_t, f) in zip(sensor_forces, sensor_torque, robot_position,
+    for (s_f, s_t, r_p, r_o, r_v, r_w, j_a, j_v, j_t, d_j_a, d_j_t) in zip(sensor_forces, sensor_torque, robot_position,
                                                                            robot_orientation, robot_velocity, robot_angular,
                                                                            joint_angle, joint_velocity, joint_torque,
-                                                                           desired_joint_angle, desired_joint_torque, forces):
+                                                                           desired_joint_angle, desired_joint_torque):
         reflected_sensor_force = T @ s_f
         reflected_sensor_torque = T @ s_t
         reflected_sensor = np.append(reflected_sensor_force, reflected_sensor_torque)
@@ -107,7 +107,6 @@ def get_reflection_chua(states: List[np.ndarray], forces: List[np.ndarray], mode
 
         reflected_state = np.append(reflected_sensor_robot, np.append(reflected_joints, reflected_desired_joints))
         reflected_states.append(reflected_state)
-        reflected_forces.append(T @ f)
     
     return reflected_states, reflected_forces
 
@@ -131,12 +130,11 @@ def get_reflection(states: List[np.ndarray], forces: List[np.ndarray], mode: str
     haptic_orientation = [state[16:20] for state in states]
     haptic_joints = [state[20:26] for state in states]
 
-    reflected_states, reflected_forces = [], []
+    reflected_states, reflected_forces = [], T @ forces
 
-    for (r_pos, r_or, r_joints, h_pos, h_or, h_joints, f) in zip(robot_position, robot_orientation, 
+    for (r_pos, r_or, r_joints, h_pos, h_or, h_joints) in zip(robot_position, robot_orientation, 
                                                               robot_joints, haptic_position, 
-                                                              haptic_orientation, haptic_joints,
-                                                              forces):
+                                                              haptic_orientation, haptic_joints):
         reflected_robot_pos, reflected_robot_or = reflect_cartesian(r_pos, r_or, T)
         reflected_robot_joints = reflect_joints(r_joints, mode=mode)
         reflected_robot_state = np.append(np.append(reflected_robot_pos, reflected_robot_or), reflected_robot_joints)
@@ -145,7 +143,6 @@ def get_reflection(states: List[np.ndarray], forces: List[np.ndarray], mode: str
         reflected_haptic_state = np.append(np.append(reflected_haptic_pos, reflected_haptic_or), reflected_haptic_joints)
         reflected_state = np.append(reflected_robot_state, reflected_haptic_state)
         reflected_states.append(reflected_state)
-        reflected_forces.append(T @ f)
 
     return reflected_states, reflected_forces
 
@@ -197,11 +194,10 @@ def transform_state(states: List[np.ndarray], forces: List[np.ndarray], angle: i
     haptic_orientation = [state[16:20] for state in states]
     haptic_joints = [state[20:26] for state in states]
 
-    transformed_states, transformed_forces = [], []
+    transformed_states, transformed_forces = [], T @ forces
 
-    for (r_pos, r_or, r_joint, h_pos, h_or, h_joint, f) in zip(robot_position, robot_orientation, robot_joints,
-                                                               haptic_position, haptic_orientation, haptic_joints,
-                                                               forces):
+    for (r_pos, r_or, r_joint, h_pos, h_or, h_joint) in zip(robot_position, robot_orientation, robot_joints,
+                                                               haptic_position, haptic_orientation, haptic_joints):
         
         transformed_r_pos, transformed_r_or = transform_cartesian(r_pos, r_or, T)
         transformed_r_joints = transform_joints(r_joint, angle)
@@ -211,7 +207,6 @@ def transform_state(states: List[np.ndarray], forces: List[np.ndarray], angle: i
         transformed_h_state = np.append(np.append(transformed_h_pos, transformed_h_or), transformed_h_joints)
         transformed_state = np.append(transformed_r_state, transformed_h_state)
         transformed_states.append(transformed_state)
-        transformed_forces.append(T @ f)
 
     return transformed_states, transformed_forces
 
@@ -235,12 +230,12 @@ def transform_state_chua(states: List[np.ndarray], forces: List[np.ndarray], ang
     desired_joint_angle = [state[40:47] for state in states]
     desired_joint_torque = [state[47:54] for state in states]
 
-    transformed_states, transformed_forces = [], []
+    transformed_states, transformed_forces = [], T @ forces
 
-    for (s_f, s_t, r_p, r_o, r_v, r_w, j_a, j_v, j_t, d_j_a, d_j_t, f) in zip(sensor_forces, sensor_torque, robot_position,
+    for (s_f, s_t, r_p, r_o, r_v, r_w, j_a, j_v, j_t, d_j_a, d_j_t) in zip(sensor_forces, sensor_torque, robot_position,
                                                                            robot_orientation, robot_velocity, robot_angular,
                                                                            joint_angle, joint_velocity, joint_torque,
-                                                                           desired_joint_angle, desired_joint_torque, forces):
+                                                                           desired_joint_angle, desired_joint_torque):
         transformed_sensor_force = T @ s_f
         transformed_sensor_torque = T @ s_t
         transformed_sensor = np.append(transformed_sensor_force, transformed_sensor_torque)
@@ -261,7 +256,6 @@ def transform_state_chua(states: List[np.ndarray], forces: List[np.ndarray], ang
 
         transformed_state = np.append(transformed_sensor_robot, np.append(transformed_joints, transformed_desired_joints))
         transformed_states.append(transformed_state)
-        transformed_forces.append(T @ f)
     
     return transformed_states, transformed_forces
 
@@ -291,5 +285,23 @@ def plot_forces(forces):
     plt.close()
     
 
+def save_metric(name: str, metric: np.ndarray):
+    np.save(name, metric)
+
+def load_metrics(dataset: str):
+    assert dataset in ["img2force", "chua"], "The available datasets are img2force or chua"
     
+    if dataset == "img2force":
+        mean_labels = np.load("labels_mean.npy")
+        std_labels = np.load("labels_std.npy")
+        mean_forces = np.load("forces_mean.npy")
+        std_forces = np.load("forces_std.npy")
+    
+    else:
+        mean_labels = np.load("labels_mean_chua.npy")
+        std_labels = np.load("labels_std_chua.npy")
+        mean_forces = np.load("forces_mean_chua.npy")
+        std_forces = np.load("forces_std_chua.npy")
+    
+    return mean_labels, std_labels, mean_forces, std_forces
 
