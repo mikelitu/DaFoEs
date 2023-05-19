@@ -13,7 +13,7 @@ from PIL import ImageFile, Image
 from datasets.utils import RGBtoD
 from datasets.augmentations import BrightnessContrast, Compose
 import matplotlib.pyplot as plt
-from datasets.utils import plot_forces
+from datasets.utils import plot_forces, save_metric
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -95,10 +95,10 @@ class VisionStateDataset(Dataset):
                 depth_maps = sorted(scene_depth.files("*.png"))
 
             #Appending mean and std for the normalization of the labels
-            mean_labels.append(labels.mean(axis=0))
-            std_labels.append(labels.std(axis=0))
-            mean_forces.append((labels[:, -6:-3]).mean(axis=0))
-            std_forces.append((labels[:, -6:-3]).std(axis=0))
+            mean_labels.append(labels[:, :26].mean(axis=0))
+            std_labels.append(labels[:, :26].std(axis=0))
+            mean_forces.append((labels[:, 26:29]).mean(axis=0))
+            std_forces.append((labels[:, 26:29]).std(axis=0))
 
             images = sorted(scene_rgb.files("*.png"))
             
@@ -113,14 +113,19 @@ class VisionStateDataset(Dataset):
                 if self.load_depths:
                     sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
 
-                sample['label'] = [np.mean(labels[n_labels*i+a: (n_labels*i+a) + step], axis=0) for a in range(self.recurrency_size)]
-                sample['forces'] = [np.mean(labels[n_labels*i+a:(n_labels*i+a) + step, 26:29], axis=0) for a in range(self.recurrency_size)]
+                sample['label'] = [np.mean(labels[n_labels*i+a: (n_labels*i+a) + step, :26], axis=0) for a in range(self.recurrency_size)]
+                sample['forces'] = np.mean(labels[n_labels*i+(self.recurrency_size-1):(n_labels*i+(self.recurrency_size-1)) + step, 26:29], axis=0)
                 samples.append(sample)
         
         self.mean_labels = np.mean(mean_labels, axis = 0) 
         self.std_labels = np.mean(std_labels, axis = 0)
         self.mean_forces = np.mean(mean_forces, axis = 0)
         self.std_forces = np.mean(std_forces, axis = 0)
+
+        save_metric('labels_mean.npy', self.mean_labels)
+        save_metric('labels_std.npy', self.std_labels)
+        save_metric('forces_mean.npy', self.mean_forces)
+        save_metric('forces_std.npy', self.std_forces)
 
         random.shuffle(samples)
         self.samples = samples
@@ -145,7 +150,7 @@ class VisionStateDataset(Dataset):
             start, end = self.occlusion[self.occlude_param]
             norm_label[:, start:end] = 0.
 
-        norm_force = np.array([(force - self.mean_forces) / (self.std_forces + 1e-10) for force in forces])
+        norm_force = (forces - self.mean_forces) / (self.std_forces + 1e-10)
         
         if self.load_depths:
             depths = [process_depth(depth) for depth in depths]
@@ -154,7 +159,7 @@ class VisionStateDataset(Dataset):
             imgd = imgs
 
         return {'img': imgd[0] if self.recurrency_size==1 else imgd, 'robot_state': norm_label, 
-                'forces': np.mean(norm_force, axis=0)}
+                'forces': norm_force}
     
     def __len__(self):
         return len(self.samples)
@@ -165,8 +170,6 @@ if __name__ == "__main__":
     brightcont = BrightnessContrast(contrast=2., brightness=12.)
     transforms = Compose([brightcont])
     dataset = VisionStateDataset(root, transform=transforms, recurrency_size=1, load_depths=False, occlude_param="haptics_p")
-    np.save('labels_mean.npy', dataset.mean_labels)
-    np.save('labels_std.npy', dataset.std_labels)
     data = dataset[10]
 
     print(data['forces'])

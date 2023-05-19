@@ -10,6 +10,7 @@ from path import Path
 import pandas as pd
 from PIL import ImageFile
 from datasets.utils import plot_forces, save_metric
+import datasets.augmentations as augmentations
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -139,7 +140,7 @@ class ZhongeChuaDataset(Dataset):
         if self.recurrency_size == 1:
             img = img[0]
         
-        return {'img': img, 'robot_state': np.array(state).astype(np.float32), 
+        return {'img': img, 'robot_state': np.mean(state, axis=0).astype(np.float32) if self.recurrency_size==1 else np.array(state).astype(np.float32), 
                 'forces': force}
     
     def __len__(self):
@@ -147,7 +148,14 @@ class ZhongeChuaDataset(Dataset):
 
 if __name__ == "__main__":
     root_dir = Path("/home/md21local/experiment_data")
-    dataset = ZhongeChuaDataset(root_dir, recurrency_size=5)
+    transform = augmentations.Compose([augmentations.RandomHorizontalFlip(), 
+                                       augmentations.RandomVerticalFlip(),
+                                       augmentations.RandomRotation()
+                                       ])
+    
+    dataset = ZhongeChuaDataset(root_dir, recurrency_size=5, transform=transform)
+    dataloader = DataLoader(dataset, batch_size=1)
 
-    data = dataset[0]
-    print(data['forces'])
+    for i, data in enumerate(dataloader):
+        print(i)
+        continue

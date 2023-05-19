@@ -55,6 +55,7 @@ class RandomHorizontalFlip(object):
 
     def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> np.ndarray:
         
+        
         if random.random() < 0.5:
             output_images = [np.copy(np.fliplr(img)) for img in images]
             if depths is not None:
@@ -101,7 +102,7 @@ class RandomRotation(object):
     def __call__(self, images: List[np.ndarray], depths: List[np.ndarray] = None, states: List[np.ndarray] = None, forces: List[np.ndarray] = None, model: str = "img2force") -> np.array:
 
         if random.random() < 0.5:
-            angle = random.randint(-15, 15)
+            angle = random.randint(-10, 10)
             output_images = [np.array(Image.fromarray(im.astype(np.uint8)).rotate(angle)).astype(np.float32) for im in images]
             if depths is not None:
                 M = cv2.getRotationMatrix2D((depths[0].shape[0]/2, depths[0].shape[1]/2), angle, 1)
