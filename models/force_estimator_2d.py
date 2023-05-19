@@ -302,7 +302,6 @@ class RecurrentCNN(nn.Module):
             x = torch.cat([x, padded_state], dim=1)
 
         x = x.reshape(batch_size, -1, self.embed_dim) # reshape the input in case there is a mismatch
-
         # recurrent part
         h_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).float().cuda())
         c_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).float().cuda())

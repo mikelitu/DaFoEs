@@ -79,8 +79,9 @@ class Transformer(nn.Module):
             x = ff(x) + x
         return x
 
-class BaseViT(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, pool = 'cls', channels = 3, dim_head = 64, dropout = 0., emb_dropout = 0., state_include= False):
+
+class ViT(nn.Module):
+    def __init__(self, *, image_size, patch_size, dim, depth, heads, mlp_dim, pool = 'cls', channels = 3, dim_head = 64, dropout = 0., emb_dropout = 0., state_include= False):
         super().__init__()
         image_height, image_width = pair(image_size)
         patch_height, patch_width = pair(patch_size)
@@ -106,40 +107,16 @@ class BaseViT(nn.Module):
 
         self.pool = pool
         self.to_latent = nn.Identity()
-
-        if state_include:
-            self.mlp_head = nn.Sequential(
-                nn.LayerNorm(dim + 25),
-                nn.Linear(dim + 25, 500),
-                nn.BatchNorm1d(500),
-                nn.ReLU(),
-                nn.Linear(500, 200),
-                nn.BatchNorm1d(200),
-                nn.ReLU(),
-                nn.Linear(200, 50),
-                nn.BatchNorm1d(50),
-                nn.ReLU(),
-                nn.Linear(50, num_classes)
-            )
         
-        else:
-            self.mlp_head = nn.Sequential(
-                nn.LayerNorm(dim),
-                nn.Linear(dim, 500),
-                nn.BatchNorm1d(500),
-                nn.ReLU(),
-                nn.Linear(500, 200),
-                nn.BatchNorm1d(200),
-                nn.ReLU(),
-                nn.Linear(200, 50),
-                nn.BatchNorm1d(50),
-                nn.ReLU(),
-                nn.Linear(50, num_classes)
-            )
+    
+        self.mlp_head = nn.Sequential(
+            nn.LayerNorm(dim),
+            nn.Linear(dim, 500)
+        )
 
         # self.apply(self._init_weights)
 
-    def forward(self, img, var = None, robot_state = None):
+    def forward(self, img, var = None):
         x = self.to_patch_embedding(img)
         b, n, _ = x.shape
 
@@ -153,9 +130,6 @@ class BaseViT(nn.Module):
         x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
 
         x = self.to_latent(x)
-
-        if robot_state is not None:
-            x = torch.cat((x, robot_state.squeeze(1)), dim=1)
 
         return self.mlp_head(x)
     
