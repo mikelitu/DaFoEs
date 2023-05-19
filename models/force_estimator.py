@@ -74,7 +74,7 @@ class ForceEstimator(nn.Module):
                 batch_size = x[0].shape[0]
                 rec_size = len(x)
 
-                features = torch.zeros(batch_size, rec_size, )
+                features = torch.zeros(batch_size, rec_size, self.embed_dim).cuda().float()
 
                 for i in range(batch_size):
                     inp = torch.cat([img[i].unsqueeze(0) for img in x], dim=0)

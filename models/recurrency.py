@@ -22,9 +22,9 @@ class RecurrencyBlock(nn.Module):
             rs_size = robot_state.shape[-1]
             padding_dim = (512 - rs_size - 1)
             padded_state = F.pad(robot_state, (1, padding_dim), 'constant', 0)
-            x = torch.cat([features, padded_state], dim=1)
+            features = torch.cat([features, padded_state], dim=1)
         
-        x = x.reshape(batch_size, -1, self.embed_dim)
+        x = features.reshape(batch_size, -1, self.embed_dim)
         h_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).float().cuda())
         c_0 = torch.autograd.Variable(torch.randn(self.num_blocks, batch_size, self.hidden_size).float().cuda())
         x, (h_n, c_n) = self.lstm1(x, (h_0, c_0))
