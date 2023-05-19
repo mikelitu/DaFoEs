@@ -277,7 +277,6 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
                 train_writer.add_scalar('Loss', loss.item(), n_iter)
 
         else:
-            forces = forces
             pred_forces = model(imgs)
             mse_loss = mse(pred_forces, forces)
 
@@ -330,18 +329,17 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
     logger.valid_bar.update(0)
 
     for i, data in enumerate(val_loader):
-        img = [img.float().to(device) for img in data['img']]
+        imgs = [img.float().to(device) for img in data['img']]
         forces = data['forces'].float().to(device)
 
         if args.type == 'vs':
             state = data['robot_state'].float().to(device)            
-            pred_forces = model(img, state)
+            pred_forces = model(imgs, state)
             loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
             losses.update([loss.item()])
 
         else:
-            forces = forces
-            pred_forces = model(img)
+            pred_forces = model(imgs)
             loss = torch.sqrt(((forces - pred_forces) ** 2).mean())
             losses.update([loss.item()])
         
