@@ -1,7 +1,6 @@
 import torch
 from torch.utils.data import Dataset
 import imageio
-import random
 from path import Path
 from PIL import ImageFile
 import numpy as np
@@ -62,11 +61,11 @@ class TestDataset(Dataset):
                         sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
                     
                     sample['label'] = [np.mean(labels[n_labels*i+a: (n_labels*i+a) + step, :26], axis=0) for a in range(self.recurrency_size)]
-                    sample['forces'] = np.mean(labels[n_labels*i+(self.recurrency_size-1):(n_labels*i+(self.recurrency_size-1)) + step, 26:29], axis=0)
+                    sample['force'] = np.mean(labels[n_labels*i+(self.recurrency_size-1):(n_labels*i+(self.recurrency_size-1)) + step, 26:29], axis=0)
                     samples.append(sample)
         else:   
             for index in self.folder_index:
-                labels, forces = read_labels(self.root/'labels_{}')
+                labels, forces = read_labels(self.root/'labels_{}.txt'.format(index))
                 scene = self.root/"imageset_{}".format(index)
                 images = sorted(scene.files("*.jpg"))
                 labels = labels.reshape(len(images), -1)
@@ -77,7 +76,7 @@ class TestDataset(Dataset):
                     if i > len(images) - (25 + self.recurrency_size): break
                     sample = {}
                     sample['img'] = [scene/'img_{}.jpg'.format(i+a) for a in range(self.recurrency_size)]
-                    sample['state'] = [labels[i+a] for a in range(self.recurrency_size)]
+                    sample['label'] = [labels[i+a] for a in range(self.recurrency_size)]
                     sample['force'] = forces[i+(self.recurrency_size-1)]
                     samples.append(sample)
         
@@ -93,7 +92,7 @@ class TestDataset(Dataset):
             depths = None
         
         labels = sample['label']
-        forces = sample['forces']
+        forces = sample['force']
 
         if self.transform is not None:
             imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces, self.dataset)
@@ -107,7 +106,7 @@ class TestDataset(Dataset):
         else:
             imgd = imgs
 
-        return {'img': imgd, 'robot_state': np.mean(norm_label, axis=0).astype(np.float32) if self.recurrency_size==1 else np.array(norm_label).astype(np.float32),
+        return {'img': imgd[0] if self.recurrency_size==1 else imgd, 'robot_state': np.mean(norm_label, axis=0).astype(np.float32) if self.recurrency_size==1 else np.array(norm_label).astype(np.float32),
                 'forces': norm_force}
 
     def __len__(self):

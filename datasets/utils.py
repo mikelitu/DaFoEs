@@ -3,6 +3,8 @@ from typing import List, Tuple
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
+from path import Path
+import os
 
 def quaternion_rotation_matrix(Q):
     """
@@ -291,17 +293,19 @@ def save_metric(name: str, metric: np.ndarray):
 def load_metrics(dataset: str):
     assert dataset in ["img2force", "chua"], "The available datasets are img2force or chua"
     
+    root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     if dataset == "img2force":
-        mean_labels = np.load("labels_mean.npy")
-        std_labels = np.load("labels_std.npy")
-        mean_forces = np.load("forces_mean.npy")
-        std_forces = np.load("forces_std.npy")
+        mean_labels = np.load(root/"labels_mean.npy")
+        std_labels = np.load(root/"labels_std.npy")
+        mean_forces = np.load(root/"forces_mean.npy")
+        std_forces = np.load(root/"forces_std.npy")
     
     else:
-        mean_labels = np.load("labels_mean_chua.npy")
-        std_labels = np.load("labels_std_chua.npy")
-        mean_forces = np.load("forces_mean_chua.npy")
-        std_forces = np.load("forces_std_chua.npy")
+        mean_labels = np.load(root/"labels_mean_chua.npy")
+        std_labels = np.load(root/"labels_std_chua.npy")
+        mean_forces = np.load(root/"forces_mean_chua.npy")
+        std_forces = np.load(root/"forces_std_chua.npy")
     
     return mean_labels, std_labels, mean_forces, std_forces
 
