@@ -1,9 +1,8 @@
 from functools import wraps
 import torch
 from torch import nn
-
-from models.force_estimator_transformers import Attention, AdaptiveTokenSampling
-from models.force_estimator_transformers_base import Attention as BaseAttention
+from models.force_estimator import ForceEstimator
+from models.transformer import Attention
 from models.bam import BAM
 from typing import Tuple
 
@@ -11,7 +10,7 @@ def find_modules(nn_module, type):
     return [module for module in nn_module.modules() if isinstance(module, type)]
 
 class Recorder(nn.Module):
-    def __init__(self, vit, device = None):
+    def __init__(self, vit: ForceEstimator, device = None):
         super().__init__()
         self.vit = vit
 
@@ -26,7 +25,7 @@ class Recorder(nn.Module):
         self.recordings.append(output.clone().detach())
 
     def _register_hook(self):
-        modules = find_modules(self.vit.transformer, BaseAttention)
+        modules = find_modules(self.vit.encoder, Attention)
         for module in modules:
             handle = module.attend.register_forward_hook(self._hook)
             self.hooks.append(handle)
@@ -43,15 +42,13 @@ class Recorder(nn.Module):
         self.recordings.clear()
 
 
-    def forward(self, img, whatever = None, state = None):
+    def forward(self, img, state = None):
         assert not self.ejected, 'recorder has been ejected, cannot be used anymore'
         self.clear()
         if not self.hook_registered:
             self._register_hook()
-        if state is not None:
-            pred = self.vit(img, whatever, state)
-        else:
-            pred = self.vit(img)
+        
+        pred = self.vit(img, state)
 
         # move all recordings to one device before stacking
         target_device = self.device if self.device is not None else img.device

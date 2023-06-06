@@ -4,6 +4,7 @@ from models.resnet import ResnetEncoder
 from models.transformer import ViT
 from models.recurrency import RecurrencyBlock
 from models.utils import FcBlock
+from einops import repeat
 
 class ForceEstimator(nn.Module):
 
@@ -19,12 +20,36 @@ class ForceEstimator(nn.Module):
 
         if self.architecture != "fc":
             if self.architecture == "cnn":
-                self.encoder = ResnetEncoder(num_layers=50,
+                encoder = ResnetEncoder(num_layers=50,
                                             pretrained=pretrained,
                                             include_depth=include_depth,
                                             att_type=att_type)
+                
+                self.encoder = nn.Sequential(
+                    encoder.encoder.conv1,
+                    encoder.encoder.bn1,
+                    encoder.encoder.relu,
+                    encoder.encoder.maxpool,
+                    encoder.encoder.layer1,
+                    encoder.encoder.layer2,
+                    encoder.encoder.layer3,
+                    encoder.encoder.layer4[:2],
+                    encoder.encoder.layer4[2].conv1,
+                    encoder.encoder.layer4[2].bn1,
+                    encoder.encoder.layer4[2].conv2,
+                    encoder.encoder.layer4[2].bn2,
+                    encoder.encoder.layer4[2].conv3
+                )
+
+                self.splitted = nn.Sequential(
+                    encoder.encoder.layer4[2].bn3,
+                    encoder.encoder.layer4[2].relu,
+                    # encoder.encoder.avgpool,
+                    # encoder.encoder.fc
+                )
+
             elif self.architecture == "vit":
-                self.encoder = ViT(image_size=256,
+                encoder = ViT(image_size=256,
                                 patch_size=16,
                                 dim=1024,
                                 depth=6,
@@ -34,6 +59,24 @@ class ForceEstimator(nn.Module):
                                 emb_dropout=0.1,
                                 channels=4 if include_depth else 3,
                                 )
+                
+                self.cls_token = nn.Parameter(torch.randn(1, 1, 1024))
+                self.embeding = encoder.to_patch_embedding
+                self.pos_embed = encoder.pos_embedding
+                self.dropout = encoder.dropout
+
+                self.encoder = nn.Sequential(
+                    encoder.transformer.layers[:5]
+                )
+
+                self.last_layer = nn.Sequential(
+                    encoder.transformer.layers[5]
+                )
+
+                self.splitted = nn.Sequential(
+                    encoder.to_latent,
+                    encoder.mlp_head
+                )
                 
             final_ch = 512 if self.architecture=="vit" else (2048 * 8 * 8)
             
@@ -78,17 +121,51 @@ class ForceEstimator(nn.Module):
 
                 for i in range(batch_size):
                     inp = torch.cat([img[i].unsqueeze(0) for img in x], dim=0)
+                    if self.architecture == "vit":
+                        inp = self.embeding(inp)
+                        b, n, _ = inp.shape
+
+                        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
+                        inp = torch.cat((cls_tokens, inp), dim=1)
+                        inp += self.pos_embed[:, :(n + 1)]
+                        inp = self.dropout(inp)
+
                     out = self.encoder(inp)
+                    # register a hook
+                    h = out.register_hook(self.activations_hook)
+                    if self.architecture == "vit":
+                        out = self.last_layer(out)
+                        out = out[:, 0]
+                    
+                    out = self.splitted(out)
                     out = out.view(rec_size, -1)
                     features[i] = self.embed_block(out)
                 
                 pred = self.recurrency(features, rs)
             
             else:
+
+                if self.architecture == "vit":
+                    x = self.embeding(x)
+                    b, n, _ = x.shape
+
+                    cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
+                    x = torch.cat((cls_tokens, x), dim=1)
+                    x += self.pos_embed[:, :(n + 1)]
+                    x = self.dropout(x)
+
                 out = self.encoder(x)
+                
+                # register a hook
+                h = out.register_hook(self.activations_hook)
+                if self.architecture == "vit":
+                    out = self.last_layer(out)
+                    out = out[:, 0]
+                    
+                out = self.splitted(out)
                 out_flatten = out.view(out.shape[0], -1)
                 out = self.embed_block(out_flatten)
-
+                
                 if rs is not None:
                     out = torch.cat([out, rs], dim=1)
                 
@@ -98,3 +175,21 @@ class ForceEstimator(nn.Module):
             pred = self.encoder(x)
 
         return pred
+    
+    def activations_hook(self, grad):
+        self.gradients = grad
+    
+    def get_activations_gradient(self):
+        return self.gradients
+    
+    def get_activations(self, x):
+        if self.architecture == "vit":
+            x = self.embeding(x)
+            b, n, _ = x.shape
+
+            cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
+            x = torch.cat((cls_tokens, x), dim=1)
+            x += self.pos_embed[:, :(n + 1)]
+            x = self.dropout(x)
+
+        return self.encoder(x)
