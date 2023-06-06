@@ -18,7 +18,10 @@ def reshape_transform(tensor: torch.Tensor, height: int = 16, width: int = 16):
 
     return result
 
-architecture = "cnn"
+architecture = "vit"
+data = "chua"
+include_state = True
+recurrency = True
 
 normalize = Normalize(mean=[0.45, 0.45, 0.45],
                       std=[0.225, 0.225, 0.225])
@@ -37,22 +40,39 @@ transforms = Compose([CentreCrop(),
 inv_transform = Compose([inv_normalize])
 
 root_dir = Path('/home/md21local/experiment_data')
-dataset = TestDataset(root_dir=root_dir, recurrency_size=1, transform=transforms, dataset="chua")
+dataset = TestDataset(root_dir=root_dir, recurrency_size=5 if recurrency else 1, transform=transforms, dataset="chua")
 dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
 
 # plt.imshow(plt_img)
 # plt.show()
 
-model = ForceEstimator(architecture=architecture, state_size=54, recurrency=False, pretrained=False, include_depth=False)
-checkpoint_path = Path('/home/md21local/mreyzabal/checkpoints/chua/rgb/{}/visu_state_random/05-19-17:52/checkpoint.pth.tar'.format(architecture))
-checkpoint = torch.load(checkpoint_path)
+model = ForceEstimator(architecture=architecture, state_size=54, recurrency=recurrency, pretrained=False, include_depth=False)
+checkpoint_path = Path('/home/md21local/mreyzabal/checkpoints/chua/rgb/{}/{}_random'.format("r"+architecture if recurrency else architecture, "visu_state" if include_state else "visu"))
+print(sorted(checkpoint_path.dirs()))
+checkpoint_dir = sorted(checkpoint_path.dirs())[-1]/'checkpoint.pth.tar'
+print("The checkpoints are loaded from: {}".format(checkpoint_dir))
+
+checkpoint = torch.load(checkpoint_dir)
 model.load_state_dict(checkpoint['state_dict'], strict=False)
 model.eval()
 
 for i, data in enumerate(dataloader):
+    img = data['img']
+    if include_state:
+        state = data['robot_state']
+    else:
+        state = None
+    force = data['forces']
+
     plt_img = inv_transform(data['img'])[0].squeeze().permute(1, 2, 0).numpy()
-    pred = model(data['img'], data['robot_state'])
+    pred = model(img, state)
+
+    print("Forces: [{}, {}, {}] -- Prediction: [{}, {}, {}]".format(
+        force[:, 0].item(), force[:, 1].item(), force[:, 2].item(),
+        pred[:, 0].item(), pred[:, 1].item(), pred[:, 2].item()
+    ))
+
     heatmaps = []
 
     for a in range(3):
@@ -81,6 +101,7 @@ for i, data in enumerate(dataloader):
 
         heatmap = np.maximum(heatmap, 0)
         heatmap /= torch.max(heatmap)
+        heatmap = 1 / heatmap
         heatmaps.append(heatmap)
         # plt.matshow(heatmap.squeeze())
         # plt.show()
