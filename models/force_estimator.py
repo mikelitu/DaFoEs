@@ -176,20 +176,49 @@ class ForceEstimator(nn.Module):
 
         return pred
     
+    
     def activations_hook(self, grad):
         self.gradients = grad
     
+
     def get_activations_gradient(self):
         return self.gradients
     
+
     def get_activations(self, x):
-        if self.architecture == "vit":
-            x = self.embeding(x)
-            b, n, _ = x.shape
 
-            cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
-            x = torch.cat((cls_tokens, x), dim=1)
-            x += self.pos_embed[:, :(n + 1)]
-            x = self.dropout(x)
+        if self.recurrency:
+            batch_size = x[0].shape[0]
 
-        return self.encoder(x)
+            for i in range(batch_size):
+                inp = torch.cat([img[i].unsqueeze(0) for img in x], dim=0)
+                if self.architecture == "vit":
+                    inp = self.embeding(inp)
+                    b, n, _ = inp.shape
+
+                    cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
+                    inp = torch.cat((cls_tokens, inp), dim=1)
+                    inp += self.pos_embed[:, :(n + 1)]
+                    inp = self.dropout(inp)
+
+                inp = self.encoder(inp)
+
+                if i == 0:
+                    out = torch.zeros(batch_size, inp.shape[0], inp.shape[1], inp.shape[2], inp.shape[3]).cuda().float()
+                out[i] = inp
+            
+            out = torch.mean(out, dim=1)
+        
+        else:
+            if self.architecture == "vit":
+                x = self.embeding(x)
+                b, n, _ = x.shape
+
+                cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
+                x = torch.cat((cls_tokens, x), dim=1)
+                x += self.pos_embed[:, :(n + 1)]
+                x = self.dropout(x)
+            
+            out = self.encoder(x)
+
+        return out
