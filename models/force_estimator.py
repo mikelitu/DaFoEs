@@ -176,7 +176,7 @@ class ForceEstimator(nn.Module):
 
         return pred
     
-    
+
     def activations_hook(self, grad):
         self.gradients = grad
     
@@ -204,7 +204,10 @@ class ForceEstimator(nn.Module):
                 inp = self.encoder(inp)
 
                 if i == 0:
-                    out = torch.zeros(batch_size, inp.shape[0], inp.shape[1], inp.shape[2], inp.shape[3]).cuda().float()
+                    if self.architecture == "vit":
+                        out = torch.zeros(batch_size, inp.shape[0], inp.shape[1], inp.shape[2]).cuda().float()
+                    else:
+                        out = torch.zeros(batch_size, inp.shape[0], inp.shape[1], inp.shape[2], inp.shape[3]).cuda().float()
                 out[i] = inp
             
             out = torch.mean(out, dim=1)
