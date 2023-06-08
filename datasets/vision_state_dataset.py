@@ -17,6 +17,56 @@ from datasets.utils import plot_forces, save_metric
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+def read_labels(label_file):
+    """
+    Read the txt file containing the robot state and reshape it to a meaningful vector to pair with the
+    video frames.
+    Parameters
+    ----------
+    root : str
+        The root directory where the label files are
+    name: str
+        The name of the label file with the .txt extension
+    Returns
+    -------
+    robot_state : ndarray
+        A matrix with the 54 dimensional robot state vector for every frame in the video. The information is as follows:
+        | 0 -> Time (t)
+        | 1 to 6 -> Force sensor reading (fx, fy, fz, tx, ty, tz)
+        | 7 to 19 -> Dvrk estimation task position, orientation, linear and angular velocities (px, py, pz, qx, qy, qz, qw, vx, vy, vz, wx, wy, wz)
+        | 20 to 26 -> Joint angles (q1, q2, q3, q4, q5, q6, q7)
+        | 27 to 33 -> Joint velocities (vq1, vq2, vq3, vq4, vq5, vq6, vq7)
+        | 44 to 40 -> Joint torque (tq1, tq2, tq3, tq4, tq5, tq6, tq7)
+        | 41 to 47 -> Desired joint angle (q1d, q2d, q3d, q4d, q5d, q6d, q7d)
+        | 48 to 54 -> Desired joint torque (tq1d, tq2d, tq3d, tq4d, tq5d, tq6d, tq7d)
+        | 55 to 57 -> Estimated end effector force (psm_fx, psm_fy, psm_fz)
+    """
+
+    with open(label_file, "r") as file_object:
+        lines = file_object.read().splitlines()
+        robot_state = []
+        for line in lines:
+            row = []
+            splitted = line.split(",")
+            _ = [row.append(float(f)) for f in splitted]
+            robot_state.append(row)
+
+    robot_state = np.array(robot_state).astype(np.float32)
+    state = robot_state[:, 1:55]
+    force = robot_state[:, 55:58]
+
+    return state, force
+
+def img2force_2_chua(labels):
+    new_labels = np.zeros((labels.shape[0], 54))
+    # Robot position and orientation
+    new_labels[:, 6:13] = labels[:, :7]
+    new_labels[:, 19:25] = labels[:, 7:13]
+    new_labels[:, 40:46] = labels[:, 20:26]
+    new_labels[:, 47:54] = labels[:, 13:20]
+
+    return new_labels
+
 
 def load_as_float(path: Path) -> np.ndarray:
     return  imageio.imread(path)[:,:, :3].astype(np.float32)
@@ -43,17 +93,41 @@ class VisionStateDataset(Dataset):
         transform functions takes in a list images and a numpy array representing the intrinsics of the camera and the robot state
     """
 
-    def __init__(self, root, recurrency_size=5, load_depths=True, max_depth=25., is_train=True, transform=None, seed=0, train_type="random",
-                 occlude_param=None):
+    def __init__(self, recurrency_size=5, load_depths=True, max_depth=25., is_train=True, transform=None, seed=0, train_type="random",
+                 occlude_param=None, dataset="img2force"):
+        
+        assert dataset in ["img2force", "chua", "mixed"], "The only available datasets are img2force, chua or mixed"
         
         np.random.seed(seed)
         random.seed(seed)
-        self.root = Path(root)
 
-        self.occlusion = {"robot_p": [0, 7],
-                          "robot_j": [7, 13],
-                          "haptics_p": [13, 20],
-                          "haptics_j": [20, 26]}
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        root = Path(root)
+        self.dataset = dataset
+
+        if dataset == "img2force":
+            data_root_img2force = root/"visu_depth_haptic_data"
+            self.data_root_img2force = data_root_img2force
+        elif dataset == "chua":
+            data_root_chua = root/"experiment_data"
+            self.data_root_chua = data_root_chua
+        else:
+            data_root_img2force = root/"visu_depth_haptic_data"
+            data_root_chua = root/"experiment_data"
+            self.data_root_img2force = data_root_img2force
+            self.data_root_chua = data_root_chua
+
+        self.occlusion = {"force_sensor": [0, 6],
+                          "robot_p": [6, 9],
+                          "robot_or": [9, 13],
+                          "robot_v": [13, 16],
+                          "robot_w": [16, 19],
+                          "robot_q": [19, 26],
+                          "robot_vq": [26, 33],
+                          "robot_tq": [33, 40],
+                          "robot_qd": [40, 47],
+                          "robot_tqd": [47, 54]
+                        }
         
         train_files = {"random": "train.txt", 
                     "geometry": "train_geometry.txt", 
@@ -69,8 +143,19 @@ class VisionStateDataset(Dataset):
                     "stiffness": "val_stiffness.txt",
                     "position": "val_position.txt"}
 
-        scene_list_path = self.root/train_files[train_type] if is_train else self.root/val_files[train_type]
-        self.scenes = [self.root/folder[:-1] for folder in open(scene_list_path)][:-1]
+        
+        if dataset == "img2force":
+            scene_list_path = self.data_root_img2force/train_files[train_type] if is_train else self.data_root_img2force/val_files[train_type]
+            self.scenes = [self.data_root_img2force/folder[:-1] for folder in open(scene_list_path)][:-1]
+        elif dataset == "chua":
+            scene_list_path = self.data_root_chua/"train.txt" if is_train else self.data_root_chua/"val.txt"
+            self.folder_index = [folder.split('_')[-1].rstrip('\n') for folder in open(scene_list_path)]
+        else:
+            scene_list_path = self.data_root_img2force/train_files[train_type] if is_train else self.data_root_img2force/val_files[train_type]
+            self.scenes = [self.data_root_img2force/folder[:-1] for folder in open(scene_list_path)][:-1]
+            scene_list_path = self.data_root_chua/"train.txt" if is_train else self.data_root_chua/"val.txt"
+            self.folder_index = [folder.split('_')[-1].rstrip('\n') for folder in open(scene_list_path)]
+
         self.transform = transform
         self.is_train = is_train
         self.load_depths = load_depths
@@ -83,6 +168,22 @@ class VisionStateDataset(Dataset):
     def crawl_folders(self):
         
         samples = []
+        
+        if self.dataset == "img2force":
+            samples = self.load_img2force(samples)
+        
+        elif self.dataset == "chua":
+            samples = self.load_chua(samples)
+        
+        else:
+            samples = self.load_img2force(samples)
+            samples = self.load_chua(samples)
+
+        random.shuffle(samples)
+        self.samples = samples
+    
+    def load_img2force(self, samples):
+
         mean_labels, std_labels = [], []
         mean_forces, std_forces = [], []
 
@@ -109,12 +210,13 @@ class VisionStateDataset(Dataset):
                 if i < 20: continue
                 if i + self.recurrency_size > len(images) - 20: break
                 sample = {}
+                sample['dataset'] = "img2force" # Create a flag to identify it during processing
                 sample['img'] = [im for im in images[i:i+self.recurrency_size]]
                 if self.load_depths:
                     sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
 
                 sample['label'] = [np.mean(labels[n_labels*i+a: (n_labels*i+a) + step, :26], axis=0) for a in range(self.recurrency_size)]
-                sample['forces'] = np.mean(labels[n_labels*i+(self.recurrency_size-1):(n_labels*i+(self.recurrency_size-1)) + step, 26:29], axis=0)
+                sample['force'] = np.mean(labels[n_labels*i+(self.recurrency_size-1):(n_labels*i+(self.recurrency_size-1)) + step, 26:29], axis=0)
                 samples.append(sample)
         
         self.mean_labels = np.mean(mean_labels, axis = 0) 
@@ -127,30 +229,81 @@ class VisionStateDataset(Dataset):
         save_metric('forces_mean.npy', self.mean_forces)
         save_metric('forces_std.npy', self.std_forces)
 
-        random.shuffle(samples)
-        self.samples = samples
+        return samples
+    
+    def load_chua(self, samples):
+
+        mean_labels, std_labels = [], []
+        mean_forces, std_forces = [], []
+
+        for index in self.folder_index:
+
+            labels, forces = read_labels(self.data_root_chua/'labels_{}.txt'.format(index))
+            # plot_forces(forces)
+            scene = self.data_root_chua/"imageset_{}".format(index)
+
+            # Appending mean and std for the normalization of the labels
+            mean_labels.append(labels.mean(axis=0))
+            std_labels.append(labels.std(axis=0))
+            mean_forces.append(forces.mean(axis=0))
+            std_forces.append(forces.std(axis=0))
+
+            images = sorted(scene.files("*.jpg"))
+            labels = labels.reshape(len(images), -1)
+            forces = forces.reshape(len(images), -1)
+
+
+            for i in range(len(images)):
+                if i < 80: continue
+                if i > len(images) - (25 + self.recurrency_size): break
+                sample = {}
+                sample['dataset'] = "chua" # Flag to identify the data for processing
+                sample['img'] = [scene/'img_{}.jpg'.format(i+a) for a in range(self.recurrency_size)]
+                sample['label'] = [labels[i+a] for a in range(self.recurrency_size)] 
+                sample['force'] = forces[i+(self.recurrency_size-1)]
+                samples.append(sample)
+        
+        self.mean_chua_labels = np.mean(mean_labels, axis = 0) 
+        self.std_chua_labels = np.mean(std_labels, axis = 0)
+        self.mean_chua_forces = np.mean(mean_forces, axis = 0)
+        self.std_chua_forces = np.mean(std_forces, axis = 0)
+
+        save_metric('labels_mean_chua.npy', self.mean_chua_labels)
+        save_metric('labels_std_chua.npy', self.std_chua_labels)
+        save_metric('forces_mean_chua.npy', self.mean_chua_forces)
+        save_metric('forces_std_chua.npy', self.std_chua_forces)
+
+        return samples
     
     def __getitem__(self, index: int) -> Dict[str, List[torch.Tensor]]:
         sample = self.samples[index]
         imgs = [load_as_float(img) for img in sample['img']]
+        
         if self.load_depths:
             depths = [load_depth(depth) for depth in sample['depth']]
         else:
             depths = None
         
         labels = sample['label']
-        forces = sample['forces']
+        forces = sample['force']
 
         if self.transform is not None:
             imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces)
         
-        norm_label = np.array([(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels])
+        if sample['dataset'] == "img2force":
+            norm_label = np.array([(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels])
+            norm_label = img2force_2_chua(norm_label)
+        else:
+            norm_label = np.array([(label - self.mean_chua_labels) / (self.std_chua_labels + 1e-10) for label in labels])
 
         if self.occlude_param is not None and self.is_train:
             start, end = self.occlusion[self.occlude_param]
             norm_label[:, start:end] = 0.
 
-        norm_force = (forces - self.mean_forces) / (self.std_forces + 1e-10)
+        if sample['dataset'] == 'img2force':
+            norm_force = (forces - self.mean_forces) / (self.std_forces + 1e-10)
+        else:
+            norm_force = (forces - self.mean_chua_forces) / (self.std_chua_forces + 1e-10)
         
         if self.load_depths:
             depths = [process_depth(depth) for depth in depths]
@@ -165,12 +318,11 @@ class VisionStateDataset(Dataset):
         return len(self.samples)
 
 if __name__ == "__main__":
-    root = '/home/md21local/visu_depth_haptic_data'
+    dataset_name = "img2force"
     
     brightcont = BrightnessContrast(contrast=2., brightness=12.)
     transforms = Compose([brightcont])
-    dataset = VisionStateDataset(root, transform=transforms, recurrency_size=1, load_depths=False, occlude_param="haptics_p")
+    dataset = VisionStateDataset(transform=transforms, recurrency_size=5, load_depths=False, dataset="mixed")
     data = dataset[10]
-
-    print(data['forces'])
+    print(len(dataset))
     
