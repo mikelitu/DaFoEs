@@ -11,7 +11,7 @@ from path import Path
 import pandas as pd
 from PIL import ImageFile, Image
 from datasets.utils import RGBtoD
-from datasets.augmentations import BrightnessContrast, Compose
+from datasets.augmentations import BrightnessContrast, Compose, ArrayToTensor
 import matplotlib.pyplot as plt
 from datasets.utils import plot_forces, save_metric
 
@@ -78,7 +78,8 @@ def process_depth(rgb_depth: torch.Tensor) -> torch.Tensor:
     depth = torch.zeros((1, rgb_depth.shape[1], rgb_depth.shape[2]))
     for i in range(rgb_depth.shape[1]):
         for j in range(rgb_depth.shape[2]):
-            depth[:, i, j] = RGBtoD(rgb_depth[0, i, j], rgb_depth[1, i, j], rgb_depth[2, i, j])
+            pixel = RGBtoD(rgb_depth[0, i, j].item(), rgb_depth[1, i, j].item(), rgb_depth[2, i, j].item())
+            depth[:, i, j].item = pixel
     
     return (depth.float() - depth.mean()) / depth.std()
 
@@ -280,7 +281,15 @@ class VisionStateDataset(Dataset):
         imgs = [load_as_float(img) for img in sample['img']]
         
         if self.load_depths:
-            depths = [load_depth(depth) for depth in sample['depth']]
+            if self.dataset == "img2force":
+                depths = [load_depth(depth) for depth in sample['depth']]
+            elif self.dataset == "chua":
+                depths = [np.zeros_like(imgs[0]) for _ in range(len(imgs))]
+            else:
+                if sample['dataset'] == "img2force":
+                    depths = [load_depth(depth) for depth in sample['depth']]
+                else:
+                    depths = [np.zeros_like(imgs[0]) for _ in range(len(imgs))]
         else:
             depths = None
         
@@ -321,8 +330,8 @@ if __name__ == "__main__":
     dataset_name = "img2force"
     
     brightcont = BrightnessContrast(contrast=2., brightness=12.)
-    transforms = Compose([brightcont])
-    dataset = VisionStateDataset(transform=transforms, recurrency_size=5, load_depths=False, dataset="mixed")
+    transforms = Compose([brightcont, ArrayToTensor()])
+    dataset = VisionStateDataset(transform=transforms, recurrency_size=5, load_depths=True, dataset="mixed")
     data = dataset[10]
     print(len(dataset))
     

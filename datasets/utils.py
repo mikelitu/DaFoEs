@@ -224,7 +224,7 @@ def transform_state_chua(states: List[np.ndarray], forces: List[np.ndarray], ang
 
 
 @torch.jit.script
-def RGBtoD(r, g, b) -> float:
+def RGBtoD(r: float, g: float, b: float) -> float:
     if (b + g + r < 255):
         return 0.
     elif (r >= g) and (r >= b):
