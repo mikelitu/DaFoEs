@@ -120,7 +120,7 @@ class VisionStateDataset(Dataset):
 
         self.occlusion = {"force_sensor": [0, 6],
                           "robot_p": [6, 9],
-                          "robot_or": [9, 13],
+                          "robot_o": [9, 13],
                           "robot_v": [13, 16],
                           "robot_w": [16, 19],
                           "robot_q": [19, 26],
@@ -325,13 +325,4 @@ class VisionStateDataset(Dataset):
     
     def __len__(self):
         return len(self.samples)
-
-if __name__ == "__main__":
-    dataset_name = "img2force"
-    
-    brightcont = BrightnessContrast(contrast=2., brightness=12.)
-    transforms = Compose([brightcont, ArrayToTensor()])
-    dataset = VisionStateDataset(transform=transforms, recurrency_size=5, load_depths=True, dataset="mixed")
-    data = dataset[10]
-    print(len(dataset))
     
