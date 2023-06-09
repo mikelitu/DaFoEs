@@ -13,6 +13,7 @@ import pickle
 
 parser = argparse.ArgumentParser(description="Script to test the different models for ForceEstimation variability",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("--dataset", choices=["chua", "img2force", "mixed"])
 parser.add_argument("--architecture", choices=['cnn', 'vit', 'fc'], default='vit', help='The chosen architecture to test')
 parser.add_argument("--type", type=str, default="vs", choices=["v", "vs"], help='Include the state')
 parser.add_argument("--train-type", type=str, default='random', help='The training type of the chosen model')
@@ -20,7 +21,6 @@ parser.add_argument("--save-dir", default='results', type=str, help='Save direct
 parser.add_argument("--save", action='store_true', help='Save metrics and predictions for further analysis')
 parser.add_argument("--recurrency", action='store_true')
 parser.add_argument("--include-depth", action='store_true')
-parser.add_argument("--chua", action="store_true")
 parser.add_argument("--att-type", default=None, help="Additional attention values")
 
 
@@ -28,10 +28,10 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     train_modes = ["random", "color", "geometry", "structure", "stiffness", "position"]
     assert architecture.lower() in ["vit", "cnn", "fc"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
     assert train_mode in train_modes, "'{}' is not an available training mode. The available training mode are: {}".format(train_mode, train_modes)
-    assert data in ["img2force", "chua"], "The available datasets for this case are: 'img2force' or 'chua'."
+    assert data in ["img2force", "chua", "mixed"], "The available datasets for this case are: 'img2force' or 'chua'."
     
     if include_state:
-        state_size = 54 if data=="chua" else 26
+        state_size = 54 
     else:
         state_size = 0
 

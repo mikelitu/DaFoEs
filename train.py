@@ -1,26 +1,24 @@
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
-from tqdm import tqdm
 from torch.utils.data import DataLoader
 import argparse
 import time
 import csv
 import numpy as np
 from datasets import augmentations
-from utils import save_checkpoint, create_saving_dir
+from utils import save_checkpoint, create_saving_dir, none_or_str
 from tensorboardX import SummaryWriter
 from path import Path
 from logger import TermLogger, AverageMeter
 from models.force_estimator import ForceEstimator
-from models.recorder import Recorder
 from datasets.vision_state_dataset import VisionStateDataset
-from datasets.chua_dataset import ZhongeChuaDataset
+import os
 
-parser = argparse.ArgumentParser(description='Vision and roboto state based force estimator using Token Sampling Transformers',
+parser = argparse.ArgumentParser(description='Vision and robot state based force estimator using different architectures',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('data', metavar='DIR', help='path to dataset')
+parser.add_argument('--dataset', default='chua', choices=['img2force', 'chua', 'mixed'], help='available training dataset')
 parser.add_argument('--type', default='vs', choices=['v', 'vs'], type=str, help='model type it can be vision only (v) or vision and state (vs)')
 parser.add_argument('--architecture', choices=['cnn', 'vit', 'fc'], type=str, help='')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
@@ -39,7 +37,7 @@ parser.add_argument('--name', dest='name', type=str, required=True, help='name o
 parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='weight for rroot mean square error loss')
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness', "position"], default='random', type=str, help='training type for comparison')
-parser.add_argument('--chua', action='store_true')
+parser.add_argument('--occlude-param', choices=["force_sensor", "robot_p", "robot_o", "robot_v", "robot_w", "robot_q", "robot_vq", "robot_tq", "robot_qd", "robot_tqd", "None"], help="choose the parameters to occlude")
 parser.add_argument('--include-depth', action='store_true')
 parser.add_argument('--att-type', default=None, help="adding attention layers to the network")
 parser.add_argument('--recurrency', action='store_true')
@@ -55,8 +53,9 @@ def main():
     global best_error, n_iter, device
     args = parser.parse_args()
     save_path = Path(args.name)
-    checkpoint_dir = Path('/nfs/home/mreyzabal/checkpoints')
-    args.save_path = create_saving_dir(checkpoint_dir, save_path, args.architecture, args.include_depth, args.chua, args.recurrency, args.att_type)
+    root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    checkpoint_dir = root/'checkpoints'
+    args.save_path = create_saving_dir(checkpoint_dir, save_path, args.architecture, args.include_depth, args.dataset, args.recurrency, args.att_type)
     # args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('chua' if args.chua else 'img2force', )/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
@@ -83,24 +82,23 @@ def main():
     # noise = augmentations.GaussianNoise(noise_factor = 0.25)
 
     train_transform = augmentations.Compose([
-        augmentations.RandomHorizontalFlip(),
-        augmentations.RandomVerticalFlip(),
-        augmentations.RandomRotation(),
+        # augmentations.RandomHorizontalFlip(),
+        # augmentations.RandomVerticalFlip(),
+        # augmentations.RandomRotation(),
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize,
         # noise
-    ]) if args.chua else augmentations.Compose([
-        augmentations.RandomHorizontalFlip(),
-        augmentations.RandomVerticalFlip(),
-        augmentations.RandomRotation(),
+    ]) if args.dataset=="chua" else augmentations.Compose([
+        # augmentations.RandomHorizontalFlip(),
+        # augmentations.RandomVerticalFlip(),
+        # augmentations.RandomRotation(),
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         bright,
         augmentations.ArrayToTensor(),
         normalize,
-        # noise
     ])
 
     val_transform = augmentations.Compose([
@@ -108,13 +106,12 @@ def main():
         augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize
-    ]) if args.chua else augmentations.Compose([
+    ]) if args.dataset=="chua" else augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         bright,
         augmentations.ArrayToTensor(),
         normalize,
-        # noise
     ])
     
     if args.recurrency:
@@ -122,14 +119,15 @@ def main():
     else:
         recurrency_size = 1
 
-    print("=> Getting scenes from '{}'".format(args.data))
+    occ_param = none_or_str(args.occlude_param)
+    print("=> Getting scenes from the dataset '{}'".format(args.dataset))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = ZhongeChuaDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size) if args.chua else VisionStateDataset(args.data, is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth)
-    val_dataset = ZhongeChuaDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size) if args.chua else VisionStateDataset(args.data, is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth)
+    train_dataset = VisionStateDataset(is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
+    val_dataset = VisionStateDataset(is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
 
-    print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.chua else len(train_dataset.scenes)))
-    print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.chua else len(val_dataset.scenes)))
+    print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.dataset=="chua" else len(train_dataset.scenes)))
+    print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.dataset=="chua" else len(val_dataset.scenes)))
 
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True
@@ -142,7 +140,7 @@ def main():
     if args.type == "v":
         state_size = 0
     else:
-        state_size = 54 if args.chua else 26
+        state_size = 54
 
     print("=> Creating the {} model with {} encoder and {}...".format("vision & state" if args.type=="vs" else "vision", args.architecture, "recurrency" if args.recurrency else "linear"))
 
@@ -238,7 +236,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
         data_time.update(time.time() - end)
         img = [im.to(device) for im in data['img']] if args.recurrency else data['img'].to(device)
         forces = data['forces'].to(device).float()
-        state = data['robot_state'].to(device).float() if args.type=="vs" else None           
+        state = data['robot_state'].squeeze(1).to(device).float() if args.type=="vs" else None           
         
         pred_forces = model(state) if args.architecture=="fc" else model(img, state)
         mse_loss = mse(pred_forces, forces)
