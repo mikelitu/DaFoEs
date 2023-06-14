@@ -123,8 +123,8 @@ def main():
     print("=> Getting scenes from the dataset '{}'".format(args.dataset))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = VisionStateDataset(is_train=True, transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
-    val_dataset = VisionStateDataset(is_train=False, transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
+    train_dataset = VisionStateDataset(mode="train", transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
+    val_dataset = VisionStateDataset(mode="val", transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.dataset=="chua" else len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.dataset=="chua" else len(val_dataset.scenes)))
@@ -222,6 +222,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
     losses = AverageMeter(i=2,precision=4)
     w1, w2 = args.rmse_loss_weight, args.gd_loss_weight
     l1_lambda = 1e-3
+    eps = 1e-5
 
     #switch the vit_models to train mode
     model.train()
@@ -239,7 +240,7 @@ def train(args: argparse.ArgumentParser.parse_args, train_loader: DataLoader, mo
         state = data['robot_state'].squeeze(1).to(device).float() if args.type=="vs" else None           
         
         pred_forces = model(state) if args.architecture=="fc" else model(img, state)
-        mse_loss = mse(pred_forces, forces)
+        mse_loss = (pred_forces - forces).pow(2).mean() + eps
         # Add L1 regularization
         l1_norm = sum(p.abs().sum() for p in model.parameters())
         loss = w1 * mse_loss + l1_lambda * l1_norm
@@ -288,7 +289,7 @@ def validate(args:argparse.ArgumentParser.parse_args, val_loader: DataLoader, mo
     for i, data in enumerate(val_loader):
         img = [im.to(device) for im in data['img']] if args.recurrency else data['img'].to(device)
         forces = data['forces'].to(device).float()
-        state = data['robot_state'].to(device).float() if args.type == "vs" else None            
+        state = data['robot_state'].squeeze(1).to(device).float() if args.type == "vs" else None            
         
         pred_forces = model(state) if args.architecture=="fc" else model(img, state)
         loss = torch.sqrt(((forces - pred_forces) ** 2).mean())

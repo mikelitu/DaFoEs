@@ -2,13 +2,13 @@ import torch
 from datasets.augmentations import Compose, CentreCrop, SquareResize, BrightnessContrast, Normalize, ArrayToTensor
 from models.force_estimator import ForceEstimator
 from path import Path
-from datasets.test_dataset import TestDataset
+from datasets.vision_state_dataset import VisionStateDataset
 import numpy as np
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import argparse
 import pickle
+import os
 
 
 parser = argparse.ArgumentParser(description="Script to test the different models for ForceEstimation variability",
@@ -66,7 +66,6 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     print("LOADING EXPERIMENT [====>]")
     print("Loading test dataset for corresponding model...")
 
-    root_dir = Path('/nfs/home/mreyzabal/{}'.format("experiment_data" if data=="chua" else "visu_depth_haptic_data"))
     normalize = Normalize(
         mean = [0.45, 0.45, 0.45],
         std = [0.225, 0.225, 0.225]
@@ -89,12 +88,12 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
         normalize
     ])
 
-    dataset = TestDataset(root_dir, transforms, recurrency_size=recurrency_size,
+    dataset = VisionStateDataset(transform=transforms, mode="test", recurrency_size=recurrency_size,
                           dataset=data, load_depths=include_depth)
 
     print("The length of the testing dataset is: ", len(dataset))
 
-    dataloader = DataLoader(dataset, batch_size=10, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=0)
 
     return model, dataloader
 
@@ -118,7 +117,7 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
         img = [im.to(device) for im in data['img']] if recurrency else data['img'].to(device)
         
         if include_state:
-            state = data['robot_state'].to(device).float()
+            state = data['robot_state'].squeeze(1).to(device).float()
         else:
             state = None
         
@@ -144,32 +143,26 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
 
 
 def save_results(args, results, include_state: bool):
-    root_dir = Path('/nfs/home/mreyzabal/md21local/img2force')
-    print("The results will be saved at: {}/{}/{}".format(root_dir, args.save_dir, "rgbd" if args.include_depth else "rgb"))
-    save_dir = root_dir/args.save_dir/"{}".format("rgbd" if args.include_depth else "rgb")
+    root_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    print("The results will be saved at: {}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, "rgbd" if args.include_depth else "rgb"))
+    save_dir = root_dir/args.save_dir/"{}/{}".format(args.dataset, "rgbd" if args.include_depth else "rgb")
     save_dir.makedirs_p()
     f = open(save_dir/'{}_{}_{}.pkl'.format("r"+args.architecture.lower() if args.recurrency else args.architecture.lower(), "state" if include_state else "visu", args.train_type), 'wb')
     pickle.dump(results, f)
     f.close()
-    print("Saved the results in {}/{}_{}_{}.pkl".format(args.save_dir, args.architecture.lower(), "state" if include_state else "visu", args.train_type))
+    print("Saved the results in {}/{}_{}_{}.pkl".format(save_dir, args.architecture.lower(), "state" if include_state else "visu", args.train_type))
 
 @torch.no_grad()
 def main():
     args = parser.parse_args()
-    
+
     if args.type == "vs":
         include_state = True
-    else: 
-        include_state = False
-    
-    if args.chua:
-        data = "chua"
     else:
-        data = "img2force"
+        include_state = False
 
-    results = run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=data)
+    results = run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset)
     if args.save:
-        args.save_dir = 'results_chua' if args.chua else "results"
         save_results(args, results, include_state)
 
 
