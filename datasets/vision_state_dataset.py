@@ -13,7 +13,7 @@ from PIL import ImageFile, Image
 from datasets.utils import RGBtoD
 from datasets.augmentations import BrightnessContrast, Compose, ArrayToTensor
 import matplotlib.pyplot as plt
-from datasets.utils import plot_forces, save_metric
+from datasets.utils import save_metric, load_metrics
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -94,11 +94,12 @@ class VisionStateDataset(Dataset):
         transform functions takes in a list images and a numpy array representing the intrinsics of the camera and the robot state
     """
 
-    def __init__(self, recurrency_size=5, load_depths=True, max_depth=25., is_train=True, transform=None, seed=0, train_type="random",
+    def __init__(self, recurrency_size=5, load_depths=True, max_depth=25., mode="train", transform=None, seed=0, train_type="random",
                  occlude_param=None, dataset="img2force"):
         
         assert dataset in ["img2force", "chua", "mixed"], "The only available datasets are img2force, chua or mixed"
-        
+        assert mode in ["train", "val", "test"], "There is only 3 modes for the dataset: train, validation or test"
+
         np.random.seed(seed)
         random.seed(seed)
 
@@ -130,35 +131,20 @@ class VisionStateDataset(Dataset):
                           "robot_tqd": [47, 54]
                         }
         
-        train_files = {"random": "train.txt", 
-                    "geometry": "train_geometry.txt", 
-                    "color": "train_color.txt", 
-                    "structure": "train_structure.txt",
-                    "stiffness": "train_stiffness.txt",
-                    "position": "train_position.txt"}
-
-        val_files = {"random": "val.txt", 
-                    "geometry": "val_geometry.txt", 
-                    "color": "val_color.txt", 
-                    "structure": "val_structure.txt",
-                    "stiffness": "val_stiffness.txt",
-                    "position": "val_position.txt"}
-
-        
         if dataset == "img2force":
-            scene_list_path = self.data_root_img2force/train_files[train_type] if is_train else self.data_root_img2force/val_files[train_type]
+            scene_list_path = self.data_root_img2force/"{}.txt".format(mode) if train_type=="random" else self.data_root_img2force/"{}_{}.txt".format(mode, train_type)
             self.scenes = [self.data_root_img2force/folder[:-1] for folder in open(scene_list_path)][:-1]
         elif dataset == "chua":
-            scene_list_path = self.data_root_chua/"train.txt" if is_train else self.data_root_chua/"val.txt"
+            scene_list_path = self.data_root_chua/"{}.txt".format(mode)
             self.folder_index = [folder.split('_')[-1].rstrip('\n') for folder in open(scene_list_path)]
         else:
-            scene_list_path = self.data_root_img2force/train_files[train_type] if is_train else self.data_root_img2force/val_files[train_type]
+            scene_list_path = self.data_root_img2force/"{}.txt".format(mode) if train_type=="random" else self.data_root_img2force/"{}_{}.txt".format(mode, train_type)
             self.scenes = [self.data_root_img2force/folder[:-1] for folder in open(scene_list_path)][:-1]
-            scene_list_path = self.data_root_chua/"train.txt" if is_train else self.data_root_chua/"val.txt"
+            scene_list_path = self.data_root_chua/"{}.txt".format(mode)
             self.folder_index = [folder.split('_')[-1].rstrip('\n') for folder in open(scene_list_path)]
 
         self.transform = transform
-        self.is_train = is_train
+        self.mode = mode
         self.load_depths = load_depths
         self.max_depth = max_depth
         self.recurrency_size = recurrency_size
@@ -177,10 +163,13 @@ class VisionStateDataset(Dataset):
             samples = self.load_chua(samples)
         
         else:
-            samples = self.load_img2force(samples)
+            if self.mode in ["train", "val"]:
+                samples = self.load_img2force(samples)
             samples = self.load_chua(samples)
 
-        random.shuffle(samples)
+        if self.mode in ["train", "val"]:
+            random.shuffle(samples)
+            
         self.samples = samples
     
     def load_img2force(self, samples):
@@ -220,15 +209,18 @@ class VisionStateDataset(Dataset):
                 sample['force'] = np.mean(labels[n_labels*i+(self.recurrency_size-1):(n_labels*i+(self.recurrency_size-1)) + step, 26:29], axis=0)
                 samples.append(sample)
         
-        self.mean_labels = np.mean(mean_labels, axis = 0) 
-        self.std_labels = np.mean(std_labels, axis = 0)
-        self.mean_forces = np.mean(mean_forces, axis = 0)
-        self.std_forces = np.mean(std_forces, axis = 0)
+        if self.mode == "train":
+            self.mean_labels = np.mean(mean_labels, axis = 0) 
+            self.std_labels = np.mean(std_labels, axis = 0)
+            self.mean_forces = np.mean(mean_forces, axis = 0)
+            self.std_forces = np.mean(std_forces, axis = 0)
 
-        save_metric('labels_mean.npy', self.mean_labels)
-        save_metric('labels_std.npy', self.std_labels)
-        save_metric('forces_mean.npy', self.mean_forces)
-        save_metric('forces_std.npy', self.std_forces)
+            save_metric('labels_mean.npy', self.mean_labels)
+            save_metric('labels_std.npy', self.std_labels)
+            save_metric('forces_mean.npy', self.mean_forces)
+            save_metric('forces_std.npy', self.std_forces)
+        else:
+            self.mean_labels, self.std_labels, self.mean_forces, self.std_forces = load_metrics("img2force")
 
         return samples
     
@@ -264,15 +256,19 @@ class VisionStateDataset(Dataset):
                 sample['force'] = forces[i+(self.recurrency_size-1)]
                 samples.append(sample)
         
-        self.mean_chua_labels = np.mean(mean_labels, axis = 0) 
-        self.std_chua_labels = np.mean(std_labels, axis = 0)
-        self.mean_chua_forces = np.mean(mean_forces, axis = 0)
-        self.std_chua_forces = np.mean(std_forces, axis = 0)
+        if self.mode == "train":
+            self.mean_chua_labels = np.mean(mean_labels, axis = 0) 
+            self.std_chua_labels = np.mean(std_labels, axis = 0)
+            self.mean_chua_forces = np.mean(mean_forces, axis = 0)
+            self.std_chua_forces = np.mean(std_forces, axis = 0)
 
-        save_metric('labels_mean_chua.npy', self.mean_chua_labels)
-        save_metric('labels_std_chua.npy', self.std_chua_labels)
-        save_metric('forces_mean_chua.npy', self.mean_chua_forces)
-        save_metric('forces_std_chua.npy', self.std_chua_forces)
+            save_metric('labels_mean_chua.npy', self.mean_chua_labels)
+            save_metric('labels_std_chua.npy', self.std_chua_labels)
+            save_metric('forces_mean_chua.npy', self.mean_chua_forces)
+            save_metric('forces_std_chua.npy', self.std_chua_forces)
+        
+        else:
+            self.mean_chua_labels, self.std_chua_labels, self.mean_chua_forces, self.std_chua_forces = load_metrics("chua")
 
         return samples
     
@@ -284,12 +280,12 @@ class VisionStateDataset(Dataset):
             if self.dataset == "img2force":
                 depths = [load_depth(depth) for depth in sample['depth']]
             elif self.dataset == "chua":
-                depths = [np.zeros_like(imgs[0]) for _ in range(len(imgs))]
+                depths = [np.random.randn(imgs[0].shape) for _ in range(len(imgs))]
             else:
                 if sample['dataset'] == "img2force":
                     depths = [load_depth(depth) for depth in sample['depth']]
                 else:
-                    depths = [np.zeros_like(imgs[0]) for _ in range(len(imgs))]
+                    depths = [np.random.randn(imgs[0].shape) for _ in range(len(imgs))]
         else:
             depths = None
         
@@ -305,7 +301,7 @@ class VisionStateDataset(Dataset):
         else:
             norm_label = np.array([(label - self.mean_chua_labels) / (self.std_chua_labels + 1e-10) for label in labels])
 
-        if self.occlude_param is not None and self.is_train:
+        if self.occlude_param is not None and self.mode == "train":
             start, end = self.occlusion[self.occlude_param]
             norm_label[:, start:end] = 0.
 
@@ -325,4 +321,3 @@ class VisionStateDataset(Dataset):
     
     def __len__(self):
         return len(self.samples)
-    

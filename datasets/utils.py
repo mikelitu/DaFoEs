@@ -255,7 +255,7 @@ def load_metrics(dataset: str):
     assert dataset in ["img2force", "chua"], "The available datasets are img2force or chua"
     
     root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+    
     if dataset == "img2force":
         mean_labels = np.load(root/"labels_mean.npy")
         std_labels = np.load(root/"labels_std.npy")
