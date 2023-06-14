@@ -132,7 +132,8 @@ class ForceEstimator(nn.Module):
 
                     out = self.encoder(inp)
                     # register a hook
-                    h = out.register_hook(self.activations_hook)
+                    if out.requires_grad:
+                        h = out.register_hook(self.activations_hook)
                     if self.architecture == "vit":
                         out = self.last_layer(out)
                         out = out[:, 0]
@@ -157,7 +158,8 @@ class ForceEstimator(nn.Module):
                 out = self.encoder(x)
                 
                 # register a hook
-                h = out.register_hook(self.activations_hook)
+                if out.requires_grad:
+                    h = out.register_hook(self.activations_hook)
                 if self.architecture == "vit":
                     out = self.last_layer(out)
                     out = out[:, 0]
