@@ -176,7 +176,7 @@ def main():
     else:
         include_state = False
 
-    occ_param = none_or_str(args.occ_param)
+    occ_param = none_or_str(args.occlude_param)
 
     results = run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset, occ_param=occ_param)
     if args.save:
