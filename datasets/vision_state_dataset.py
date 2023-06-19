@@ -301,7 +301,7 @@ class VisionStateDataset(Dataset):
         else:
             norm_label = np.array([(label - self.mean_chua_labels) / (self.std_chua_labels + 1e-10) for label in labels])
 
-        if self.occlude_param is not None and self.mode == "train":
+        if self.occlude_param:
             start, end = self.occlusion[self.occlude_param]
             norm_label[:, start:end] = 0.
 

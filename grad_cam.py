@@ -101,7 +101,7 @@ def main():
     dataset = TestDataset(root_dir=root_dir, recurrency_size=recurrency_size, transform=transforms, dataset=data)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-    model = ForceEstimator(architecture=architecture, state_size=54 if args.chua else 26, recurrency=recurrency, pretrained=False, include_depth=False)
+    model = ForceEstimator(architecture=architecture, state_size=54, recurrency=recurrency, pretrained=False, include_depth=False)
     checkpoint_path = Path('{}/checkpoints/{}/rgb/{}/{}_random'.format(data_root, data, "r"+architecture if recurrency else architecture, "visu_state" if include_state else "visu"))
     checkpoint_dir = sorted(checkpoint_path.dirs())[-1]/'checkpoint.pth.tar'
     print("The checkpoints are loaded from: {}".format(checkpoint_dir))
@@ -111,9 +111,12 @@ def main():
     model.to(device)
     model.eval()
 
-    video_frames = []
+    heatmap_frames = []
+
 
     for i, data in enumerate(tqdm(dataloader)):
+        if i < 20: continue
+
         img = [im.to(device) for im in data['img']] if recurrency else data['img'].to(device)
         if include_state:
             state = data['robot_state'].to(device)
@@ -133,38 +136,43 @@ def main():
 
         heatmaps = [cv2.resize(heatmap.numpy(), (plt_img.shape[0], plt_img.shape[1])) for heatmap in heatmaps]
         heatmaps = [np.clip(heatmap, 0, 1) for heatmap in heatmaps]
-        heatmaps = [np.uint8(255. * heatmap) for heatmap in heatmaps]
+        heatmaps = [np.uint8(255 * heatmap) for heatmap in heatmaps]
         heatmaps = [cv2.applyColorMap(heatmap, cv2.COLORMAP_JET) for heatmap in heatmaps]
-        plt_img = cv2.cvtColor(plt_img, cv2.COLOR_RGB2BGR)
+        bgr_img = cv2.cvtColor(plt_img, cv2.COLOR_RGB2BGR)
+        bgr_img *= 255 / bgr_img.max()
 
-        superimposed_img_x = plt_img + 0.3 * heatmaps[0]
+        superimposed_img_x = bgr_img.astype(np.float32) + 0.4 * heatmaps[0].astype(np.float32)
+        superimposed_img_x *= 255 / superimposed_img_x.max()
+        superimposed_img_x = np.uint8(superimposed_img_x)
         superimposed_img_x = cv2.putText(superimposed_img_x, "GT: {:.2f}N | Pred: {:.2f}N".format(force[:, 0].item(), pred[:, 0].item()),
                                          (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), thickness=2)
 
-        superimposed_img_y = plt_img + 0.3 * heatmaps[1]
-        superimposed_img_y = cv2.putText(superimposed_img_y, "GT: {:.2f}N | Pred: {:.2f}N".format(force[:, 1].item(), pred[:, 1].item()),
+        superimposed_img_y = bgr_img.astype(np.float32) + 0.4 * heatmaps[1].astype(np.float32)
+        superimposed_img_y *= 255 / superimposed_img_y.max()
+        superimposed_img_y = np.uint8(superimposed_img_y)
+        superimposed_img_y = cv2.putText(superimposed_img_y.astype(np.uint8), "GT: {:.2f}N | Pred: {:.2f}N".format(force[:, 1].item(), pred[:, 1].item()),
                                          (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), thickness=2)
         
-        superimposed_img_z = plt_img + 0.3 * heatmaps[2]
+
+        superimposed_img_z = bgr_img.astype(np.float32) + 0.4 * heatmaps[2].astype(np.float32)
+        superimposed_img_z *= 255 / superimposed_img_z.max()
+        superimposed_img_z = np.uint8(superimposed_img_z)
         superimposed_img_z = cv2.putText(superimposed_img_z, "GT: {:.2f}N | Pred: {:.2f}N".format(force[:, 2].item(), pred[:, 2].item()),
                                          (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), thickness=2)
         
         superimposed_img = np.concatenate([superimposed_img_x, superimposed_img_y, superimposed_img_z], axis=1)
 
-        video_frames.append(superimposed_img)
-    
+        heatmap_frames.append(superimposed_img)
+
     print("Generating video...")
-    # with imageio.get_writer(saving_dir/"grad_cam.mp4", fps=20) as writer:
-    #     for f in tqdm(video_frames):
-    #         writer.append_data(f)
 
     fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
-    out = cv2.VideoWriter(saving_dir/'grad_cam.mp4', fourcc, 20, (256, 256), isColor=True)
-
-    for f in tqdm(video_frames):
-        out.write(f)
+    out_heatmaps = cv2.VideoWriter(saving_dir/'grad_cam.mp4', fourcc, 20., (3 * 256, 256))
     
-    out.release()
+    for h in tqdm(heatmap_frames):
+        out_heatmaps.write(h)
+    out_heatmaps.release()
+    print("Videos saved at: {}/grad_cam.mp4".format(saving_dir))
     
 
 if __name__ == "__main__":

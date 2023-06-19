@@ -9,6 +9,7 @@ from tqdm import tqdm
 import argparse
 import pickle
 import os
+from utils import none_or_str
 
 
 parser = argparse.ArgumentParser(description="Script to test the different models for ForceEstimation variability",
@@ -18,13 +19,14 @@ parser.add_argument("--architecture", choices=['cnn', 'vit', 'fc'], default='vit
 parser.add_argument("--type", type=str, default="vs", choices=["v", "vs"], help='Include the state')
 parser.add_argument("--train-type", type=str, default='random', help='The training type of the chosen model')
 parser.add_argument("--save-dir", default='results', type=str, help='Save directory for the metrics and predictions')
+parser.add_argument('--occlude-param', choices=["force_sensor", "robot_p", "robot_o", "robot_v", "robot_w", "robot_q", "robot_vq", "robot_tq", "robot_qd", "robot_tqd", "None"], help="choose the parameters to occlude")
 parser.add_argument("--save", action='store_true', help='Save metrics and predictions for further analysis')
 parser.add_argument("--recurrency", action='store_true')
 parser.add_argument("--include-depth", action='store_true')
 parser.add_argument("--att-type", default=None, help="Additional attention values")
 
 
-def load_test_experiment(architecture: str, include_depth: bool, data: str, include_state: bool = True, recurrency: bool = False,  train_mode: str = "random", att_type: str = None):
+def load_test_experiment(architecture: str, include_depth: bool, data: str, include_state: bool = True, recurrency: bool = False,  train_mode: str = "random", att_type: str = None, occ_param: str = None):
     train_modes = ["random", "color", "geometry", "structure", "stiffness", "position"]
     assert architecture.lower() in ["vit", "cnn", "fc"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
     assert train_mode in train_modes, "'{}' is not an available training mode. The available training mode are: {}".format(train_mode, train_modes)
@@ -52,9 +54,15 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     checkpoints_root = Path('/nfs/home/mreyzabal/checkpoints/{}'.format(data))
     
     if architecture.lower() == 'fc':
-        checkpoints = checkpoints_root/"{}/{}".format(architecture, "visu_state_"+train_mode)
+        if occ_param is None:
+            checkpoints = checkpoints_root/"{}/{}".format(architecture, "visu_state_"+train_mode)
+        else:
+            checkpoints = checkpoints_root/"{}/{}/{}".format(architecture, occ_param, "visu_state_"+train_mode)
     else:
-        checkpoints = checkpoints_root/"{}/{}/{}_{}".format("rgbd" if include_depth else "rgb", "r"+architecture if recurrency else architecture, "visu_state" if include_state else "visu", train_mode)
+        if occ_param is None:
+            checkpoints = checkpoints_root/"{}/{}/{}_{}".format("rgbd" if include_depth else "rgb", "r"+architecture if recurrency else architecture, "visu_state" if include_state else "visu", train_mode)
+        else:
+            checkpoints = checkpoints_root/"{}/{}/{}/{}_{}".format("rgbd" if include_depth else "rgb", "r"+architecture if recurrency else architecture, occ_param, "visu_state" if include_state else "visu", train_mode)
     
     print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
     checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
@@ -98,14 +106,14 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     return model, dataloader
 
 
-def run_test_experiment(architecture: str, include_depth: bool, data: str, recurrency: bool = False, include_state: bool = True, train_mode: str = "random"):
+def run_test_experiment(architecture: str, include_depth: bool, data: str, recurrency: bool = False, include_state: bool = True, train_mode: str = "random", occ_param: str = None):
 
     test_predictions, shared_predictions = [], []
     test_metrics, shared_metrics = [], []
     test_forces, shared_forces = [], []
 
     # Loading the necessary data
-    model, dataloader = load_test_experiment(architecture, include_depth=include_depth, include_state=include_state, train_mode=train_mode, data=data, recurrency=recurrency)
+    model, dataloader = load_test_experiment(architecture, include_depth=include_depth, include_state=include_state, train_mode=train_mode, data=data, recurrency=recurrency, occ_param=occ_param)
     
     device = torch.device("cuda")
     
@@ -142,12 +150,19 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
     return results
 
 
-def save_results(args, results, include_state: bool):
+def save_results(args, results, include_state: bool, occ_param: str = None):
     root_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-    print("The results will be saved at: {}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, "rgbd" if args.include_depth else "rgb"))
-    save_dir = root_dir/args.save_dir/"{}/{}".format(args.dataset, "rgbd" if args.include_depth else "rgb")
-    save_dir.makedirs_p()
-    f = open(save_dir/'{}_{}_{}.pkl'.format("r"+args.architecture.lower() if args.recurrency else args.architecture.lower(), "state" if include_state else "visu", args.train_type), 'wb')
+    if occ_param is None:
+        print("The results will be saved at: {}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, "rgbd" if args.include_depth else "rgb"))
+        save_dir = root_dir/args.save_dir/"{}/{}".format(args.dataset, "rgbd" if args.include_depth else "rgb")
+        save_dir.makedirs_p()
+        f = open(save_dir/'{}_{}_{}.pkl'.format("r"+args.architecture.lower() if args.recurrency else args.architecture.lower(), "state" if include_state else "visu", args.train_type), 'wb')
+    else:
+        print("The results will be saved at: {}/{}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, "rgbd" if args.include_depth else "rgb", occ_param))
+        save_dir = root_dir/args.save_dir/"{}/{}/{}".format(args.dataset, "rgbd" if args.include_depth else "rgb", occ_param)
+        save_dir.makedirs_p()
+        f = open(save_dir/'{}_{}_{}.pkl'.format("r"+args.architecture.lower() if args.recurrency else args.architecture.lower(), "state" if include_state else "visu", args.train_type), 'wb')
+
     pickle.dump(results, f)
     f.close()
     print("Saved the results in {}/{}_{}_{}.pkl".format(save_dir, args.architecture.lower(), "state" if include_state else "visu", args.train_type))
@@ -161,9 +176,11 @@ def main():
     else:
         include_state = False
 
-    results = run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset)
+    occ_param = none_or_str(args.occ_param)
+
+    results = run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset, occ_param=occ_param)
     if args.save:
-        save_results(args, results, include_state)
+        save_results(args, results, include_state, occ_param=occ_param)
 
 
 if __name__ == "__main__":

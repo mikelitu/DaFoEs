@@ -52,10 +52,11 @@ torch.autograd.set_detect_anomaly(True)
 def main():
     global best_error, n_iter, device
     args = parser.parse_args()
+    occ_param = none_or_str(args.occlude_param)
     save_path = Path(args.name)
     root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     checkpoint_dir = root/'checkpoints'
-    args.save_path = create_saving_dir(checkpoint_dir, save_path, args.architecture, args.include_depth, args.dataset, args.recurrency, args.att_type)
+    args.save_path = create_saving_dir(checkpoint_dir, save_path, args.architecture, args.include_depth, args.dataset, args.recurrency, args.att_type, occ_param)
     # args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('chua' if args.chua else 'img2force', )/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
@@ -119,7 +120,7 @@ def main():
     else:
         recurrency_size = 1
 
-    occ_param = none_or_str(args.occlude_param)
+    
     print("=> Getting scenes from the dataset '{}'".format(args.dataset))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
