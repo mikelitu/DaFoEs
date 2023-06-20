@@ -1,5 +1,5 @@
 import torch
-from typing import List, Tuple
+from typing import List
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt

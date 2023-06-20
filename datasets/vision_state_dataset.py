@@ -1,19 +1,16 @@
 import torch
-import torch.nn as nn
 import os
 from typing import Dict, List
 
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import imageio
 import numpy as np
 import random
 from path import Path
 import pandas as pd
 from PIL import ImageFile, Image
-from datasets.utils import RGBtoD
 from datasets.augmentations import BrightnessContrast, Compose, ArrayToTensor
-import matplotlib.pyplot as plt
-from datasets.utils import save_metric, load_metrics
+from datasets.utils import save_metric, load_metrics, RGBtoD
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
