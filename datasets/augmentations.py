@@ -190,14 +190,3 @@ class SquareResize(object):
             scaled_depths = None
         return scaled_images, scaled_depths, states, forces
 
-
-class GaussianNoise(object):
-
-    def __init__(self, noise_factor = 0.3) -> None:
-        self.noise_factor = noise_factor
-    
-    def __call__(self, images: List[torch.Tensor]) -> List[torch.Tensor]:
-        noise_factor = self.noise_factor * random.random()
-        noisy_imgs = [img + torch.randn_like(img) * noise_factor for img in images]
-        noisy_imgs = [torch.clip(img, 0., 1.) for img in noisy_imgs]
-        return noisy_imgs
