@@ -1,12 +1,9 @@
 import torch
 import torch.nn as nn
-from models.utils import FcBlock
 import numpy as np
 import torchvision.models as models
 import torch.utils.model_zoo as model_zoo
 from models.bam import BAM
-import torch.nn.functional as F
-from typing import List
 
 
 class ResNetMultiImageInput(models.ResNet):
