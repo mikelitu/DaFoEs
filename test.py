@@ -108,9 +108,9 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
 
 def run_test_experiment(architecture: str, include_depth: bool, data: str, recurrency: bool = False, include_state: bool = True, train_mode: str = "random", occ_param: str = None):
 
-    test_predictions, shared_predictions = [], []
-    test_metrics, shared_metrics = [], []
-    test_forces, shared_forces = [], []
+    predictions = []
+    metrics = []
+    forces = []
 
     # Loading the necessary data
     model, dataloader = load_test_experiment(architecture, include_depth=include_depth, include_state=include_state, train_mode=train_mode, data=data, recurrency=recurrency, occ_param=occ_param)
@@ -129,23 +129,22 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
         else:
             state = None
         
-        forces = data['forces'].to(device).float()
+        force = data['forces'].to(device).float()
 
-        pred_forces = model(state) if architecture=="fc" else model(img, state)
+        pred_force = model(state) if architecture=="fc" else model(img, state)
         
-        rmse = torch.sqrt(((forces - pred_forces) ** 2).mean(dim=1))
+        rmse = torch.sqrt(((force - pred_force) ** 2).mean(dim=1))
 
         for i in range(rmse.shape[0]):
-            test_metrics.append(rmse[i].item())
-            test_forces.append(forces[i].detach().cpu().numpy())
-            test_predictions.append(pred_forces[i].detach().cpu().numpy())
+            metrics.append(rmse[i].item())
+            forces.append(force[i].detach().cpu().numpy())
+            predictions.append(pred_force[i].detach().cpu().numpy())
 
-    test_metrics = np.array(test_metrics)
-    test_forces = np.array(test_forces).reshape(-1, 3)
-    test_predictions = np.array(test_predictions).reshape(-1, 3)
+    metrics = np.array(metrics)
+    forces = np.array(forces).reshape(-1, 3)
+    predictions = np.array(predictions).reshape(-1, 3)
 
-    results = {'test_rmse': test_metrics, 'test_gt': test_forces, 'test_pred': test_predictions,
-               'shared_rmse': shared_metrics, 'shared_gt': shared_forces, 'shared_pred': shared_predictions}
+    results = {'test_rmse': metrics, 'test_gt': forces, 'test_pred': predictions}
 
     return results
 
