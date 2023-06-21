@@ -80,7 +80,6 @@ def main():
     bright = augmentations.BrightnessContrast(contrast=2., 
                                               brightness=12.)
     
-    # noise = augmentations.GaussianNoise(noise_factor = 0.25)
 
     train_transform = augmentations.Compose([
         # augmentations.RandomHorizontalFlip(),
