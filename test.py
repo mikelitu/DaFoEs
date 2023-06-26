@@ -97,7 +97,7 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     ])
 
     dataset = VisionStateDataset(transform=transforms, mode="test", recurrency_size=recurrency_size,
-                          dataset=data, load_depths=include_depth)
+                          dataset="mixed", load_depths=include_depth)
 
     print("The length of the testing dataset is: ", len(dataset))
 
@@ -108,9 +108,9 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
 
 def run_test_experiment(architecture: str, include_depth: bool, data: str, recurrency: bool = False, include_state: bool = True, train_mode: str = "random", occ_param: str = None):
 
-    predictions = []
-    metrics = []
-    forces = []
+    predictions_img2force, predictions_chua = [], []
+    metrics_img2force, metrics_chua = [], []
+    forces_img2force, forces_chua = [], []
 
     # Loading the necessary data
     model, dataloader = load_test_experiment(architecture, include_depth=include_depth, include_state=include_state, train_mode=train_mode, data=data, recurrency=recurrency, occ_param=occ_param)
@@ -136,15 +136,19 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
         rmse = torch.sqrt(((force - pred_force) ** 2).mean(dim=1))
 
         for i in range(rmse.shape[0]):
-            metrics.append(rmse[i].item())
-            forces.append(force[i].detach().cpu().numpy())
-            predictions.append(pred_force[i].detach().cpu().numpy())
+            metrics_img2force.append(rmse[i].item()) if data['dataset'][i] == "img2force" else metrics_chua.append(rmse[i].item())
+            forces_img2force.append(force[i].detach().cpu().numpy()) if data['dataset'][i] == "img2force" else forces_chua.append(force[i].detach().cpu().numpy())
+            predictions_img2force.append(pred_force[i].detach().cpu().numpy()) if data['dataset'][i] == "img2force" else predictions_chua.append(pred_force[i].detach().cpu().numpy())
 
-    metrics = np.array(metrics)
-    forces = np.array(forces).reshape(-1, 3)
-    predictions = np.array(predictions).reshape(-1, 3)
+    metrics_img2force = np.array(metrics_img2force)
+    metrics_chua = np.array(metrics_chua)
+    forces_img2force = np.array(forces_img2force).reshape(-1, 3)
+    forces_chua = np.array(forces_chua).reshape(-1, 3)
+    predictions_img2force = np.array(predictions_img2force).reshape(-1, 3)
+    predictions_chua = np.array(predictions_chua).reshape(-1, 3)
 
-    results = {'test_rmse': metrics, 'test_gt': forces, 'test_pred': predictions}
+    results = {'img2force_rmse': metrics_img2force, 'img2force_gt': forces_img2force, 'img2force_pred': predictions_img2force,
+               'chua_rmse': metrics_chua, 'chua_gt': forces_chua, 'chua_pred': predictions_chua}
 
     return results
 

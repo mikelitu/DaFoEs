@@ -160,8 +160,7 @@ class VisionStateDataset(Dataset):
             samples = self.load_chua(samples)
         
         else:
-            if self.mode in ["train", "val"]:
-                samples = self.load_img2force(samples)
+            samples = self.load_img2force(samples)
             samples = self.load_chua(samples)
 
         if self.mode in ["train", "val"]:
@@ -314,7 +313,7 @@ class VisionStateDataset(Dataset):
             imgd = imgs
 
         return {'img': imgd[0] if self.recurrency_size==1 else imgd, 'robot_state': norm_label, 
-                'forces': norm_force}
+                'forces': norm_force, 'dataset': sample['dataset']}
     
     def __len__(self):
         return len(self.samples)
