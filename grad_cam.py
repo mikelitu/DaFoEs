@@ -97,7 +97,7 @@ def main():
 
     inv_transform = Compose([inv_normalize])
 
-    dataset = VisionStateDataset(recurrency_size=recurrency_size, transform=transforms, dataset="mixed", load_depths=False)
+    dataset = VisionStateDataset(recurrency_size=recurrency_size, transform=transforms, dataset="mixed", load_depths=False, mode="test")
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     model = ForceEstimator(architecture=architecture, state_size=54, recurrency=recurrency, pretrained=False, include_depth=False)
