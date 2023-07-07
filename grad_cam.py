@@ -2,7 +2,6 @@ import torch
 from models.force_estimator import ForceEstimator
 from torch.utils.data import DataLoader
 from datasets.vision_state_dataset import VisionStateDataset
-from datasets.test_dataset import TestDataset
 from datasets.augmentations import Normalize, BrightnessContrast, SquareResize, CentreCrop, Compose, ArrayToTensor
 from path import Path
 import numpy as np
@@ -27,7 +26,8 @@ parser.add_argument('--type', default='vs', choices=['v', 'vs'], type=str,
                     help='define if we have a multimodal network or not')
 parser.add_argument('--architecture', choices=['cnn', 'vit'], type=str,
                     help='the base architecture of the chosen network')
-parser.add_argument('--chua', action='store_true', help="decide if the used dataset is the one from Chua's paper")
+parser.add_argument("--dataset", default="mixed", type=str, choices=["img2force", "chua", "mixed"],
+                    help="The dataset loading for the experiment")
 parser.add_argument('--recurrency', action='store_true', help="add recurrent blocks as the last processing layer")
 parser.add_argument('--cuda', action='store_true', help='flag to activate the use of GPU acceleration')
 
@@ -72,7 +72,7 @@ def grad_cam(model: ForceEstimator, img: torch.Tensor, architecture: str):
 def main():
     args = parser.parse_args()
     architecture = args.architecture
-    data = "chua" if args.chua else "img2force"
+    data = args.dataset
     include_state = True if args.type=="vs" else False
     recurrency = args.recurrency
     recurrency_size = 5 if recurrency else 1
@@ -97,8 +97,7 @@ def main():
 
     inv_transform = Compose([inv_normalize])
 
-    root_dir = Path("{}/{}".format(data_root, "experiment_data" if args.chua else "visu_depth_haptic_data"))
-    dataset = TestDataset(root_dir=root_dir, recurrency_size=recurrency_size, transform=transforms, dataset=data)
+    dataset = VisionStateDataset(recurrency_size=recurrency_size, transform=transforms, dataset="mixed", load_depths=False)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     model = ForceEstimator(architecture=architecture, state_size=54, recurrency=recurrency, pretrained=False, include_depth=False)
@@ -111,7 +110,8 @@ def main():
     model.to(device)
     model.eval()
 
-    heatmap_frames = []
+    heatmap_frames_img2force = []
+    heatmap_frames_chua = []
 
 
     for i, data in enumerate(tqdm(dataloader)):
@@ -162,17 +162,27 @@ def main():
         
         superimposed_img = np.concatenate([superimposed_img_x, superimposed_img_y, superimposed_img_z], axis=1)
 
-        heatmap_frames.append(superimposed_img)
+        if data["dataset"] == "img2force":
+            heatmap_frames_img2force.append(superimposed_img)
+        else:
+            heatmap_frames_chua.append(superimposed_img)
 
     print("Generating video...")
 
     fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
-    out_heatmaps = cv2.VideoWriter(saving_dir/'grad_cam.mp4', fourcc, 20., (3 * 256, 256))
+    out_heatmaps_img2force = cv2.VideoWriter(saving_dir/'grad_cam_img2force.mp4', fourcc, 20., (3 * 256, 256))
     
-    for h in tqdm(heatmap_frames):
-        out_heatmaps.write(h)
-    out_heatmaps.release()
-    print("Videos saved at: {}/grad_cam.mp4".format(saving_dir))
+    for h in tqdm(heatmap_frames_img2force):
+        out_heatmaps_img2force.write(h)
+    out_heatmaps_img2force.release()
+    print("Videos saved at: {}/grad_cam_img2force.mp4".format(saving_dir))
+
+    out_heatmaps_chua = cv2.VideoWriter(saving_dir/'grad_cam_chua.mp4', fourcc, 20., (3 * 256, 256))
+    
+    for h in tqdm(heatmap_frames_chua):
+        out_heatmaps_chua.write(h)
+    out_heatmaps_chua.release()
+    print("Videos saved at: {}/grad_cam_chua.mp4".format(saving_dir))
     
 
 if __name__ == "__main__":
