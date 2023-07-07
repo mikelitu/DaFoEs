@@ -119,7 +119,7 @@ def main():
 
         img = [im.to(device) for im in data['img']] if recurrency else data['img'].to(device)
         if include_state:
-            state = data['robot_state'].to(device)
+            state = data['robot_state'].squeeze(1).to(device).float()
         else:
             state = None
         force = data['forces']
