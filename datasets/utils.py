@@ -269,4 +269,3 @@ def load_metrics(dataset: str):
         std_forces = np.load(root/"forces_std_chua.npy")
     
     return mean_labels, std_labels, mean_forces, std_forces
-

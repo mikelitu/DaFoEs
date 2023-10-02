@@ -6,7 +6,7 @@ import argparse
 import time
 import csv
 import numpy as np
-from datasets import augmentations
+import datasets.augmentations as augmentations
 from utils import save_checkpoint, create_saving_dir, none_or_str
 from tensorboardX import SummaryWriter
 from path import Path
@@ -82,18 +82,17 @@ def main():
     
 
     train_transform = augmentations.Compose([
-        # augmentations.RandomHorizontalFlip(),
-        # augmentations.RandomVerticalFlip(),
-        # augmentations.RandomRotation(),
+        augmentations.RandomHorizontalFlip(),
+        augmentations.RandomVerticalFlip(),
+        augmentations.RandomRotation(),
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize,
-        # noise
     ]) if args.dataset=="chua" else augmentations.Compose([
-        # augmentations.RandomHorizontalFlip(),
-        # augmentations.RandomVerticalFlip(),
-        # augmentations.RandomRotation(),
+        augmentations.RandomHorizontalFlip(),
+        augmentations.RandomVerticalFlip(),
+        augmentations.RandomRotation(),
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         bright,

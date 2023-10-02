@@ -9,7 +9,6 @@ import random
 from path import Path
 import pandas as pd
 from PIL import ImageFile, Image
-from datasets.augmentations import BrightnessContrast, Compose, ArrayToTensor
 from datasets.utils import save_metric, load_metrics, RGBtoD
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -289,7 +288,7 @@ class VisionStateDataset(Dataset):
         forces = sample['force']
 
         if self.transform is not None:
-            imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces)
+            imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces, sample["dataset"])
         
         if sample['dataset'] == "img2force":
             norm_label = np.array([(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels])
