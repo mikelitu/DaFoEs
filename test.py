@@ -170,6 +170,27 @@ def save_results(args, results, include_state: bool, occ_param: str = None):
     f.close()
     print("Saved the results in {}/{}_{}_{}.pkl".format(save_dir, args.architecture.lower(), "state" if include_state else "visu", args.train_type))
 
+def get_metrics(list_of_results: list[dict]):
+    # List of resuls contains a list of dicttionaries with keys: "img2force_rmse", "img2force_gt", "img2force_pred", "chua_rmse", "chua_gt", "chua_pred"
+    tmp_results = {}
+    keys = list_of_results[0].keys()
+    for r in list_of_results:
+        for key in keys:
+            if key in tmp_results:
+                tmp_results[key].append(r[key])
+            else:
+                tmp_results[key] = [r[key]]
+    
+    results = {}
+    for key in keys:
+        result = tmp_results[key]
+        mean_r = np.mean(result, axis=0)
+        std_r = np.std(result, axis=0)
+        results[f"{key}_mean"] = mean_r
+        results[f"{key}_std"] = std_r
+    
+    return results
+
 @torch.no_grad()
 def main():
     args = parser.parse_args()
@@ -180,8 +201,12 @@ def main():
         include_state = False
 
     occ_param = none_or_str(args.occlude_param)
+    num_experiments = 5
 
-    results = run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset, occ_param=occ_param)
+    list_of_results = [run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset, occ_param=occ_param) for _ in range(num_experiments)]
+    
+    results = get_metrics(list_of_results)
+
     if args.save:
         save_results(args, results, include_state, occ_param=occ_param)
 
