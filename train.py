@@ -18,7 +18,7 @@ import os
 parser = argparse.ArgumentParser(description='Vision and robot state based force estimator using different architectures',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--dataset', default='chua', choices=['img2force', 'chua', 'mixed'], help='available training dataset')
+parser.add_argument('--dataset', default='dvrk', choices=['dafoes', 'dvrk', 'mixed'], help='available training dataset')
 parser.add_argument('--type', default='vs', choices=['v', 'vs'], type=str, help='model type it can be vision only (v) or vision and state (vs)')
 parser.add_argument('--architecture', choices=['cnn', 'vit', 'fc'], type=str, help='')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
@@ -57,7 +57,7 @@ def main():
     root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     checkpoint_dir = root/'checkpoints'
     args.save_path = create_saving_dir(checkpoint_dir, save_path, args.architecture, args.include_depth, args.dataset, args.recurrency, args.att_type, occ_param)
-    # args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('chua' if args.chua else 'img2force', )/save_path/timestamp
+    # args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('dvrk' if args.dvrk else 'dafoes', )/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
 
@@ -89,7 +89,7 @@ def main():
         augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize,
-    ]) if args.dataset=="chua" else augmentations.Compose([
+    ]) if args.dataset=="dvrk" else augmentations.Compose([
         augmentations.RandomHorizontalFlip(),
         augmentations.RandomVerticalFlip(),
         augmentations.RandomRotation(),
@@ -105,7 +105,7 @@ def main():
         augmentations.SquareResize(),
         augmentations.ArrayToTensor(),
         normalize
-    ]) if args.dataset=="chua" else augmentations.Compose([
+    ]) if args.dataset=="dvrk" else augmentations.Compose([
         augmentations.CentreCrop(),
         augmentations.SquareResize(),
         bright,
@@ -125,8 +125,8 @@ def main():
     train_dataset = VisionStateDataset(mode="train", transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
     val_dataset = VisionStateDataset(mode="val", transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
 
-    print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.dataset=="chua" else len(train_dataset.scenes)))
-    print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.dataset=="chua" else len(val_dataset.scenes)))
+    print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.dataset=="dvrk" else len(train_dataset.scenes)))
+    print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.dataset=="dvrk" else len(val_dataset.scenes)))
 
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True

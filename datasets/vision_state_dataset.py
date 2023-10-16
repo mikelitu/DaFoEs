@@ -53,7 +53,7 @@ def read_labels(label_file):
 
     return state, force
 
-def img2force_2_chua(labels):
+def dafoes_2_dvrk(labels):
     new_labels = np.zeros((labels.shape[0], 54))
     # Robot position and orientation
     new_labels[:, 6:13] = labels[:, :7]
@@ -91,9 +91,9 @@ class VisionStateDataset(Dataset):
     """
 
     def __init__(self, recurrency_size=5, load_depths=True, max_depth=25., mode="train", transform=None, seed=0, train_type="random",
-                 occlude_param=None, dataset="img2force"):
+                 occlude_param=None, dataset="dafoes"):
         
-        assert dataset in ["img2force", "chua", "mixed"], "The only available datasets are img2force, chua or mixed"
+        assert dataset in ["dafoes", "dvrk", "mixed"], "The only available datasets are dafoes, dvrk or mixed"
         assert mode in ["train", "val", "test"], "There is only 3 modes for the dataset: train, validation or test"
 
         np.random.seed(seed)
@@ -103,17 +103,17 @@ class VisionStateDataset(Dataset):
         root = Path(root)
         self.dataset = dataset
 
-        if dataset == "img2force":
-            data_root_img2force = root/"visu_depth_haptic_data"
-            self.data_root_img2force = data_root_img2force
-        elif dataset == "chua":
-            data_root_chua = root/"experiment_data"
-            self.data_root_chua = data_root_chua
+        if dataset == "dafoes":
+            data_root_dafoes = root/"visu_depth_haptic_data"
+            self.data_root_dafoes = data_root_dafoes
+        elif dataset == "dvrk":
+            data_root_dvrk = root/"experiment_data"
+            self.data_root_dvrk = data_root_dvrk
         else:
-            data_root_img2force = root/"visu_depth_haptic_data"
-            data_root_chua = root/"experiment_data"
-            self.data_root_img2force = data_root_img2force
-            self.data_root_chua = data_root_chua
+            data_root_dafoes = root/"visu_depth_haptic_data"
+            data_root_dvrk = root/"experiment_data"
+            self.data_root_dafoes = data_root_dafoes
+            self.data_root_dvrk = data_root_dvrk
 
         self.occlusion = {"force_sensor": [0, 6],
                           "robot_p": [6, 9],
@@ -127,16 +127,16 @@ class VisionStateDataset(Dataset):
                           "robot_tqd": [47, 54]
                         }
         
-        if dataset == "img2force":
-            scene_list_path = self.data_root_img2force/"{}.txt".format(mode) if train_type=="random" else self.data_root_img2force/"{}_{}.txt".format(mode, train_type)
-            self.scenes = [self.data_root_img2force/folder[:-1] for folder in open(scene_list_path)][:-1]
-        elif dataset == "chua":
-            scene_list_path = self.data_root_chua/"{}.txt".format(mode)
+        if dataset == "dafoes":
+            scene_list_path = self.data_root_dafoes/"{}.txt".format(mode) if train_type=="random" else self.data_root_dafoes/"{}_{}.txt".format(mode, train_type)
+            self.scenes = [self.data_root_dafoes/folder[:-1] for folder in open(scene_list_path)][:-1]
+        elif dataset == "dvrk":
+            scene_list_path = self.data_root_dvrk/"{}.txt".format(mode)
             self.folder_index = [folder.split('_')[-1].rstrip('\n') for folder in open(scene_list_path)]
         else:
-            scene_list_path = self.data_root_img2force/"{}.txt".format(mode) if train_type=="random" else self.data_root_img2force/"{}_{}.txt".format(mode, train_type)
-            self.scenes = [self.data_root_img2force/folder[:-1] for folder in open(scene_list_path)][:-1]
-            scene_list_path = self.data_root_chua/"{}.txt".format(mode)
+            scene_list_path = self.data_root_dafoes/"{}.txt".format(mode) if train_type=="random" else self.data_root_dafoes/"{}_{}.txt".format(mode, train_type)
+            self.scenes = [self.data_root_dafoes/folder[:-1] for folder in open(scene_list_path)][:-1]
+            scene_list_path = self.data_root_dvrk/"{}.txt".format(mode)
             self.folder_index = [folder.split('_')[-1].rstrip('\n') for folder in open(scene_list_path)]
 
         self.transform = transform
@@ -152,22 +152,22 @@ class VisionStateDataset(Dataset):
         
         samples = []
         
-        if self.dataset == "img2force":
-            samples = self.load_img2force(samples)
+        if self.dataset == "dafoes":
+            samples = self.load_dafoes(samples)
         
-        elif self.dataset == "chua":
-            samples = self.load_chua(samples)
+        elif self.dataset == "dvrk":
+            samples = self.load_dvrk(samples)
         
         else:
-            samples = self.load_img2force(samples)
-            samples = self.load_chua(samples)
+            samples = self.load_dafoes(samples)
+            samples = self.load_dvrk(samples)
 
         if self.mode in ["train", "val"]:
             random.shuffle(samples)
             
         self.samples = samples
     
-    def load_img2force(self, samples):
+    def load_dafoes(self, samples):
 
         mean_labels, std_labels = [], []
         mean_forces, std_forces = [], []
@@ -195,7 +195,7 @@ class VisionStateDataset(Dataset):
                 if i < 20: continue
                 if i + self.recurrency_size > len(images) - 20: break
                 sample = {}
-                sample['dataset'] = "img2force" # Create a flag to identify it during processing
+                sample['dataset'] = "dafoes" # Create a flag to identify it during processing
                 sample['img'] = [im for im in images[i:i+self.recurrency_size]]
                 if self.load_depths:
                     sample['depth'] = [depth for depth in depth_maps[i:i+self.recurrency_size]]
@@ -215,20 +215,20 @@ class VisionStateDataset(Dataset):
             save_metric('forces_mean.npy', self.mean_forces)
             save_metric('forces_std.npy', self.std_forces)
         else:
-            self.mean_labels, self.std_labels, self.mean_forces, self.std_forces = load_metrics("img2force")
+            self.mean_labels, self.std_labels, self.mean_forces, self.std_forces = load_metrics("dafoes")
 
         return samples
     
-    def load_chua(self, samples):
+    def load_dvrk(self, samples):
 
         mean_labels, std_labels = [], []
         mean_forces, std_forces = [], []
 
         for index in self.folder_index:
 
-            labels, forces = read_labels(self.data_root_chua/'labels_{}.txt'.format(index))
+            labels, forces = read_labels(self.data_root_dvrk/'labels_{}.txt'.format(index))
             # plot_forces(forces)
-            scene = self.data_root_chua/"imageset_{}".format(index)
+            scene = self.data_root_dvrk/"imageset_{}".format(index)
 
             # Appending mean and std for the normalization of the labels
             mean_labels.append(labels.mean(axis=0))
@@ -245,25 +245,25 @@ class VisionStateDataset(Dataset):
                 if i < 80: continue
                 if i > len(images) - (25 + self.recurrency_size): break
                 sample = {}
-                sample['dataset'] = "chua" # Flag to identify the data for processing
+                sample['dataset'] = "dvrk" # Flag to identify the data for processing
                 sample['img'] = [scene/'img_{}.jpg'.format(i+a) for a in range(self.recurrency_size)]
                 sample['label'] = [labels[i+a] for a in range(self.recurrency_size)] 
                 sample['force'] = forces[i+(self.recurrency_size-1)]
                 samples.append(sample)
         
         if self.mode == "train":
-            self.mean_chua_labels = np.mean(mean_labels, axis = 0) 
-            self.std_chua_labels = np.mean(std_labels, axis = 0)
-            self.mean_chua_forces = np.mean(mean_forces, axis = 0)
-            self.std_chua_forces = np.mean(std_forces, axis = 0)
+            self.mean_dvrk_labels = np.mean(mean_labels, axis = 0) 
+            self.std_dvrk_labels = np.mean(std_labels, axis = 0)
+            self.mean_dvrk_forces = np.mean(mean_forces, axis = 0)
+            self.std_dvrk_forces = np.mean(std_forces, axis = 0)
 
-            save_metric('labels_mean_chua.npy', self.mean_chua_labels)
-            save_metric('labels_std_chua.npy', self.std_chua_labels)
-            save_metric('forces_mean_chua.npy', self.mean_chua_forces)
-            save_metric('forces_std_chua.npy', self.std_chua_forces)
+            save_metric('labels_mean_dvrk.npy', self.mean_dvrk_labels)
+            save_metric('labels_std_dvrk.npy', self.std_dvrk_labels)
+            save_metric('forces_mean_dvrk.npy', self.mean_dvrk_forces)
+            save_metric('forces_std_dvrk.npy', self.std_dvrk_forces)
         
         else:
-            self.mean_chua_labels, self.std_chua_labels, self.mean_chua_forces, self.std_chua_forces = load_metrics("chua")
+            self.mean_dvrk_labels, self.std_dvrk_labels, self.mean_dvrk_forces, self.std_dvrk_forces = load_metrics("dvrk")
 
         return samples
     
@@ -272,12 +272,12 @@ class VisionStateDataset(Dataset):
         imgs = [load_as_float(img) for img in sample['img']]
         
         if self.load_depths:
-            if self.dataset == "img2force":
+            if self.dataset == "dafoes":
                 depths = [load_depth(depth) for depth in sample['depth']]
-            elif self.dataset == "chua":
+            elif self.dataset == "dvrk":
                 depths = [np.random.randn(imgs[0].shape) for _ in range(len(imgs))]
             else:
-                if sample['dataset'] == "img2force":
+                if sample['dataset'] == "dafoes":
                     depths = [load_depth(depth) for depth in sample['depth']]
                 else:
                     depths = [np.random.randn(imgs[0].shape) for _ in range(len(imgs))]
@@ -290,20 +290,20 @@ class VisionStateDataset(Dataset):
         if self.transform is not None:
             imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces, sample["dataset"])
         
-        if sample['dataset'] == "img2force":
+        if sample['dataset'] == "dafoes":
             norm_label = np.array([(label[:26] - self.mean_labels[:26]) / (self.std_labels[:26] + 1e-10) for label in labels])
-            norm_label = img2force_2_chua(norm_label)
+            norm_label = dafoes_2_dvrk(norm_label)
         else:
-            norm_label = np.array([(label - self.mean_chua_labels) / (self.std_chua_labels + 1e-10) for label in labels])
+            norm_label = np.array([(label - self.mean_dvrk_labels) / (self.std_dvrk_labels + 1e-10) for label in labels])
 
         if self.occlude_param:
             start, end = self.occlusion[self.occlude_param]
             norm_label[:, start:end] = 0.
 
-        if sample['dataset'] == 'img2force':
+        if sample['dataset'] == 'dafoes':
             norm_force = (forces - self.mean_forces) / (self.std_forces + 1e-10)
         else:
-            norm_force = (forces - self.mean_chua_forces) / (self.std_chua_forces + 1e-10)
+            norm_force = (forces - self.mean_dvrk_forces) / (self.std_dvrk_forces + 1e-10)
         
         if self.load_depths:
             depths = [process_depth(depth) for depth in depths]

@@ -14,7 +14,7 @@ from utils import none_or_str
 
 parser = argparse.ArgumentParser(description="Script to test the different models for ForceEstimation variability",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("--dataset", choices=["chua", "img2force", "mixed"])
+parser.add_argument("--dataset", choices=["dvrk", "dafoes", "mixed"])
 parser.add_argument("--architecture", choices=['cnn', 'vit', 'fc'], default='vit', help='The chosen architecture to test')
 parser.add_argument("--type", type=str, default="vs", choices=["v", "vs"], help='Include the state')
 parser.add_argument("--train-type", type=str, default='random', help='The training type of the chosen model')
@@ -30,7 +30,7 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     train_modes = ["random", "color", "geometry", "structure", "stiffness", "position"]
     assert architecture.lower() in ["vit", "cnn", "fc"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
     assert train_mode in train_modes, "'{}' is not an available training mode. The available training mode are: {}".format(train_mode, train_modes)
-    assert data in ["img2force", "chua", "mixed"], "The available datasets for this case are: 'img2force' or 'chua'."
+    assert data in ["dafoes", "dvrk", "mixed"], "The available datasets for this case are: 'dafoes' or 'dvrk'."
     
     if include_state:
         state_size = 54 
@@ -88,7 +88,7 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
         SquareResize(),
         ArrayToTensor(),
         normalize
-    ]) if data=="chua" else Compose([
+    ]) if data=="dvrk" else Compose([
         CentreCrop(),
         SquareResize(),
         bright,
@@ -108,9 +108,9 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
 
 def run_test_experiment(architecture: str, include_depth: bool, data: str, recurrency: bool = False, include_state: bool = True, train_mode: str = "random", occ_param: str = None):
 
-    predictions_img2force, predictions_chua = [], []
-    metrics_img2force, metrics_chua = [], []
-    forces_img2force, forces_chua = [], []
+    predictions_dafoes, predictions_dvrk = [], []
+    metrics_dafoes, metrics_dvrk = [], []
+    forces_dafoes, forces_dvrk = [], []
 
     # Loading the necessary data
     model, dataloader = load_test_experiment(architecture, include_depth=include_depth, include_state=include_state, train_mode=train_mode, data=data, recurrency=recurrency, occ_param=occ_param)
@@ -136,19 +136,19 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
         rmse = torch.sqrt(((force - pred_force) ** 2).mean(dim=1))
 
         for i in range(rmse.shape[0]):
-            metrics_img2force.append(rmse[i].item()) if data['dataset'][i] == "img2force" else metrics_chua.append(rmse[i].item())
-            forces_img2force.append(force[i].detach().cpu().numpy()) if data['dataset'][i] == "img2force" else forces_chua.append(force[i].detach().cpu().numpy())
-            predictions_img2force.append(pred_force[i].detach().cpu().numpy()) if data['dataset'][i] == "img2force" else predictions_chua.append(pred_force[i].detach().cpu().numpy())
+            metrics_dafoes.append(rmse[i].item()) if data['dataset'][i] == "dafoes" else metrics_dvrk.append(rmse[i].item())
+            forces_dafoes.append(force[i].detach().cpu().numpy()) if data['dataset'][i] == "dafoes" else forces_dvrk.append(force[i].detach().cpu().numpy())
+            predictions_dafoes.append(pred_force[i].detach().cpu().numpy()) if data['dataset'][i] == "dafoes" else predictions_dvrk.append(pred_force[i].detach().cpu().numpy())
 
-    metrics_img2force = np.array(metrics_img2force)
-    metrics_chua = np.array(metrics_chua)
-    forces_img2force = np.array(forces_img2force).reshape(-1, 3)
-    forces_chua = np.array(forces_chua).reshape(-1, 3)
-    predictions_img2force = np.array(predictions_img2force).reshape(-1, 3)
-    predictions_chua = np.array(predictions_chua).reshape(-1, 3)
+    metrics_dafoes = np.array(metrics_dafoes)
+    metrics_dvrk = np.array(metrics_dvrk)
+    forces_dafoes = np.array(forces_dafoes).reshape(-1, 3)
+    forces_dvrk = np.array(forces_dvrk).reshape(-1, 3)
+    predictions_dafoes = np.array(predictions_dafoes).reshape(-1, 3)
+    predictions_dvrk = np.array(predictions_dvrk).reshape(-1, 3)
 
-    results = {'img2force_rmse': metrics_img2force, 'img2force_gt': forces_img2force, 'img2force_pred': predictions_img2force,
-               'chua_rmse': metrics_chua, 'chua_gt': forces_chua, 'chua_pred': predictions_chua}
+    results = {'dafoes_rmse': metrics_dafoes, 'dafoes_gt': forces_dafoes, 'dafoes_pred': predictions_dafoes,
+               'dvrk_rmse': metrics_dvrk, 'dvrk_gt': forces_dvrk, 'dvrk_pred': predictions_dvrk}
 
     return results
 
@@ -171,7 +171,7 @@ def save_results(args, results, include_state: bool, occ_param: str = None):
     print("Saved the results in {}/{}_{}_{}.pkl".format(save_dir, args.architecture.lower(), "state" if include_state else "visu", args.train_type))
 
 def get_metrics(list_of_results: list[dict]):
-    # List of resuls contains a list of dicttionaries with keys: "img2force_rmse", "img2force_gt", "img2force_pred", "chua_rmse", "chua_gt", "chua_pred"
+    # List of resuls contains a list of dicttionaries with keys: "dafoes_rmse", "dafoes_gt", "dafoes_pred", "dvrk_rmse", "dvrk_gt", "dvrk_pred"
     tmp_results = {}
     keys = list_of_results[0].keys()
     for r in list_of_results:

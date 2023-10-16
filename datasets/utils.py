@@ -22,7 +22,7 @@ def check_params(keys: List[str], params: List[str]):
 def generate_keys_rs() -> List[str]:
     return ["robot_pos", "joint_pos", "geo_com"]
 
-def get_reflection_chua(states: List[np.ndarray], forces: List[np.ndarray], mode: str = "horizontal"):
+def get_reflection_dvrk(states: List[np.ndarray], forces: List[np.ndarray], mode: str = "horizontal"):
     assert mode in ['horizontal', 'vertical'], "The mode must be horizontal or vertical"
     if mode == 'horizontal':
         T = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
@@ -174,7 +174,7 @@ def transform_state(states: List[np.ndarray], forces: List[np.ndarray], angle: i
     return transformed_states, transformed_forces
 
 
-def transform_state_chua(states: List[np.ndarray], forces: List[np.ndarray], angle: int):
+def transform_state_dvrk(states: List[np.ndarray], forces: List[np.ndarray], angle: int):
 
     T = np.array([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
     
@@ -252,20 +252,20 @@ def save_metric(name: str, metric: np.ndarray):
     np.save(name, metric)
 
 def load_metrics(dataset: str):
-    assert dataset in ["img2force", "chua"], "The available datasets are img2force or chua"
+    assert dataset in ["dafoes", "dvrk"], "The available datasets are dafoes or dvrk"
     
     root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     
-    if dataset == "img2force":
+    if dataset == "dafoes":
         mean_labels = np.load(root/"labels_mean.npy")
         std_labels = np.load(root/"labels_std.npy")
         mean_forces = np.load(root/"forces_mean.npy")
         std_forces = np.load(root/"forces_std.npy")
     
     else:
-        mean_labels = np.load(root/"labels_mean_chua.npy")
-        std_labels = np.load(root/"labels_std_chua.npy")
-        mean_forces = np.load(root/"forces_mean_chua.npy")
-        std_forces = np.load(root/"forces_std_chua.npy")
+        mean_labels = np.load(root/"labels_mean_dvrk.npy")
+        std_labels = np.load(root/"labels_std_dvrk.npy")
+        mean_forces = np.load(root/"forces_mean_dvrk.npy")
+        std_forces = np.load(root/"forces_std_dvrk.npy")
     
     return mean_labels, std_labels, mean_forces, std_forces
