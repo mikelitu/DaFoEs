@@ -50,7 +50,7 @@ def setup(architecture, recurrency):
                                  transform=transforms,
                                  load_depths=False,
                                  mode="val",
-                                 dataset="chua")
+                                 dataset="dvrk")
     
     dataloader = DataLoader(dataset, batch_size=1, num_workers=4)
 
