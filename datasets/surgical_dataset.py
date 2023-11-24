@@ -8,8 +8,7 @@ import random
 from path import Path
 import cv2
 from PIL import ImageFile
-from surgical_video_processing import crop_right_tool
-import matplotlib.pyplot as plt
+from datasets.surgical_video_processing import crop_right_tool
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -102,12 +101,3 @@ class SurgicalDataset(Dataset):
     def __len__(self):
         return len(self.samples)
 
-if __name__ == "__main__":
-    root = Path("/home/mikel/surgical_videos_analysis/videos/capture1")
-    dataset = SurgicalDataset(root=root,recurrency_size=5, transform=None, seed=0, extension=".png")
-    data = dataset[0]
-    img = data['img'][0]
-    print(img.shape)
-    img = img / 255.
-    plt.imshow(img)
-    plt.show()

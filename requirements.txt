@@ -22,7 +22,7 @@ nvidia-cuda-nvrtc-cu11==11.7.99
 nvidia-cuda-runtime-cu11==11.7.99
 nvidia-cudnn-cu11==8.5.0.96
 oauthlib==3.2.2
-opencv-python==4.8.0.74
+opencv-python==4.8.1.78
 packaging==23.1
 pandas==2.0.3
 path==16.7.1

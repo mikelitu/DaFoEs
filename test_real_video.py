@@ -14,6 +14,9 @@ from utils import none_or_str
 
 parser = argparse.ArgumentParser(description="Script to test the different models for ForceEstimation variability",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument("data_root", type=str, help="The root directory of the data")
+parser.add_argument("--dataset", choices=["dvrk", "dafoes", "mixed"])
 parser.add_argument("--architecture", choices=['cnn', 'vit', 'fc'], default='vit', help='The chosen architecture to test')
 parser.add_argument("--type", type=str, default="vs", choices=["v", "vs"], help='Include the state')
 parser.add_argument("--train-type", type=str, default='random', help='The training type of the chosen model')
@@ -21,15 +24,13 @@ parser.add_argument("--save-dir", default='results', type=str, help='Save direct
 parser.add_argument('--occlude-param', choices=["force_sensor", "robot_p", "robot_o", "robot_v", "robot_w", "robot_q", "robot_vq", "robot_tq", "robot_qd", "robot_tqd", "None"], help="choose the parameters to occlude")
 parser.add_argument("--save", action='store_true', help='Save metrics and predictions for further analysis')
 parser.add_argument("--recurrency", action='store_true')
-parser.add_argument("--include-depth", action='store_true')
-parser.add_argument("--att-type", default=None, help="Additional attention values")
 
 
-def load_test_experiment(architecture: str, include_depth: bool, data: str, include_state: bool = True, recurrency: bool = False,  train_mode: str = "random", att_type: str = None, occ_param: str = None):
+def load_test_experiment(architecture: str, data: str, data_root: Path, include_state: bool = True, recurrency: bool = False,  train_mode: str = "random", occ_param: str = None):
     train_modes = ["random", "color", "geometry", "structure", "stiffness", "position"]
     assert architecture.lower() in ["vit", "cnn", "fc"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
     assert train_mode in train_modes, "'{}' is not an available training mode. The available training mode are: {}".format(train_mode, train_modes)
-    assert data in ["dafoes", "dvrk", "mixed"], "The available datasets for this case are: 'dafoes' or 'dvrk'."
+    assert data in ["dafoes", "dvrk", "mixed"], "The available datasets for this case are: 'dafoes', 'dvrk' or 'mixed'."
     
     if include_state:
         state_size = 54 
@@ -39,9 +40,7 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     model = ForceEstimator(architecture,
                            state_size=state_size,
                            recurrency=recurrency,
-                           pretrained=False,
-                           include_depth=include_depth,
-                           att_type=att_type)
+                           pretrained=False)
 
     if recurrency:
         recurrency_size = 5
@@ -50,7 +49,8 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
 
     # Find the corresponding checkpoint
     print("LOADING EXPERIMENT [==>  ]")
-    checkpoints_root = Path('/nfs/home/mreyzabal/checkpoints/{}'.format(data))
+    root = os.path.dirname(os.path.abspath(__file__))
+    checkpoints_root = Path("{}/checkpoints/{}".format(root, data))
     
     if architecture.lower() == 'fc':
         if occ_param is None:
@@ -59,9 +59,9 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
             checkpoints = checkpoints_root/"{}/{}/{}".format(architecture, occ_param, "visu_state_"+train_mode)
     else:
         if occ_param is None:
-            checkpoints = checkpoints_root/"{}/{}/{}_{}".format("rgbd" if include_depth else "rgb", "r"+architecture if recurrency else architecture, "visu_state" if include_state else "visu", train_mode)
+            checkpoints = checkpoints_root/"rgb/{}/{}_{}".format("r"+architecture if recurrency else architecture, "visu_state" if include_state else "visu", train_mode)
         else:
-            checkpoints = checkpoints_root/"{}/{}/{}/{}_{}".format("rgbd" if include_depth else "rgb", "r"+architecture if recurrency else architecture, occ_param, "visu_state" if include_state else "visu", train_mode)
+            checkpoints = checkpoints_root/"rgb/{}/{}/{}_{}".format("r"+architecture if recurrency else architecture, occ_param, "visu_state" if include_state else "visu", train_mode)
     
     print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
     checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
@@ -95,24 +95,21 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
         normalize
     ])
 
-    dataset = SurgicalDataset(transform=transforms, mode="test", recurrency_size=recurrency_size,
-                          dataset="mixed", load_depths=include_depth)
+    dataset = SurgicalDataset(root=data_root, transform=transforms, mode="test", recurrency_size=recurrency_size)
 
     print("The length of the testing dataset is: ", len(dataset))
 
-    dataloader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=0)
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0)
 
     return model, dataloader
 
 
-def run_test_experiment(architecture: str, include_depth: bool, data: str, recurrency: bool = False, include_state: bool = True, train_mode: str = "random", occ_param: str = None):
+def run_test_experiment(architecture: str, data: str, data_root: Path, recurrency: bool = False, include_state: bool = True, train_mode: str = "random", occ_param: str = None):
 
-    predictions_dafoes, predictions_dvrk = [], []
-    metrics_dafoes, metrics_dvrk = [], []
-    forces_dafoes, forces_dvrk = [], []
+    predictions = []
 
     # Loading the necessary data
-    model, dataloader = load_test_experiment(architecture, include_depth=include_depth, include_state=include_state, train_mode=train_mode, data=data, recurrency=recurrency, occ_param=occ_param)
+    model, dataloader = load_test_experiment(architecture, data=data, data_root=data_root, include_state=include_state, train_mode=train_mode, recurrency=recurrency, occ_param=occ_param)
     
     device = torch.device("cuda")
     
@@ -127,27 +124,15 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
             state = data['robot_state'].squeeze(1).to(device).float()
         else:
             state = None
-        
-        force = data['forces'].to(device).float()
 
         pred_force = model(state) if architecture=="fc" else model(img, state)
         
-        rmse = torch.sqrt(((force - pred_force) ** 2).mean(dim=1))
+        for i in range(pred_force.shape[0]):
+            predictions.append(pred_force[i].detach().cpu().numpy())
 
-        for i in range(rmse.shape[0]):
-            metrics_dafoes.append(rmse[i].item()) if data['dataset'][i] == "dafoes" else metrics_dvrk.append(rmse[i].item())
-            forces_dafoes.append(force[i].detach().cpu().numpy()) if data['dataset'][i] == "dafoes" else forces_dvrk.append(force[i].detach().cpu().numpy())
-            predictions_dafoes.append(pred_force[i].detach().cpu().numpy()) if data['dataset'][i] == "dafoes" else predictions_dvrk.append(pred_force[i].detach().cpu().numpy())
+    predictions = np.array(predictions).reshape(-1, 3)
 
-    metrics_dafoes = np.array(metrics_dafoes)
-    metrics_dvrk = np.array(metrics_dvrk)
-    forces_dafoes = np.array(forces_dafoes).reshape(-1, 3)
-    forces_dvrk = np.array(forces_dvrk).reshape(-1, 3)
-    predictions_dafoes = np.array(predictions_dafoes).reshape(-1, 3)
-    predictions_dvrk = np.array(predictions_dvrk).reshape(-1, 3)
-
-    results = {'dafoes_rmse': metrics_dafoes, 'dafoes_gt': forces_dafoes, 'dafoes_pred': predictions_dafoes,
-               'dvrk_rmse': metrics_dvrk, 'dvrk_gt': forces_dvrk, 'dvrk_pred': predictions_dvrk}
+    results = {'pred': predictions}
 
     return results
 
@@ -155,13 +140,13 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
 def save_results(args, results, include_state: bool, occ_param: str = None):
     root_dir = Path(os.path.dirname(os.path.abspath(__file__)))
     if occ_param is None:
-        print("The results will be saved at: {}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, "rgbd" if args.include_depth else "rgb"))
-        save_dir = root_dir/args.save_dir/"{}/{}".format(args.dataset, "rgbd" if args.include_depth else "rgb")
+        print("The results will be saved at: {}/{}/{}/real_surgery".format(root_dir, args.save_dir, args.dataset))
+        save_dir = root_dir/args.save_dir/"{}/real_surgery".format(args.dataset)
         save_dir.makedirs_p()
         f = open(save_dir/'{}_{}_{}.pkl'.format("r"+args.architecture.lower() if args.recurrency else args.architecture.lower(), "state" if include_state else "visu", args.train_type), 'wb')
     else:
-        print("The results will be saved at: {}/{}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, "rgbd" if args.include_depth else "rgb", occ_param))
-        save_dir = root_dir/args.save_dir/"{}/{}/{}".format(args.dataset, "rgbd" if args.include_depth else "rgb", occ_param)
+        print("The results will be saved at: {}/{}/{}/real_surgery/{}".format(root_dir, args.save_dir, args.dataset, occ_param))
+        save_dir = root_dir/args.save_dir/"{}/real_surgery/{}".format(args.dataset, occ_param)
         save_dir.makedirs_p()
         f = open(save_dir/'{}_{}_{}.pkl'.format("r"+args.architecture.lower() if args.recurrency else args.architecture.lower(), "state" if include_state else "visu", args.train_type), 'wb')
 
@@ -202,7 +187,8 @@ def main():
     occ_param = none_or_str(args.occlude_param)
     num_experiments = 5
 
-    list_of_results = [run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset, occ_param=occ_param) for _ in range(num_experiments)]
+    print("Loading data from {}".format(args.data_root))
+    list_of_results = [run_test_experiment(args.architecture, data=args.dataset, data_root=args.data_root, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, occ_param=occ_param) for _ in range(num_experiments)]
     
     results = get_metrics(list_of_results)
 
