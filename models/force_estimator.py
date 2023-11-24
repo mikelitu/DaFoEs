@@ -9,7 +9,7 @@ from einops import repeat
 class ForceEstimator(nn.Module):
 
     def __init__(self, architecture: str, recurrency: bool, pretrained: bool,
-                 include_depth: bool, att_type: str = None, embed_dim: int = 512,
+                 include_depth: bool = False, att_type: str = None, embed_dim: int = 512,
                  state_size: int = 0) -> None:
         super(ForceEstimator, self).__init__()
 
