@@ -63,12 +63,12 @@ def load_test_experiment(architecture: str, data: str, data_root: Path, include_
         else:
             checkpoints = checkpoints_root/"rgb/{}/{}/{}_{}".format("r"+architecture if recurrency else architecture, occ_param, "visu_state" if include_state else "visu", train_mode)
     
-    print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
-    checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
+    # print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
+    # checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
     print("LOADING EXPERIMENT [===> ]")
     print("Loading weights...")
-    checkpoint = torch.load(checkpoint_dir)
-    model.load_state_dict(checkpoint['state_dict'], strict=False)
+    # checkpoint = torch.load(checkpoint_dir)
+    # model.load_state_dict(checkpoint['state_dict'], strict=False)
 
     print("LOADING EXPERIMENT [====>]")
     print("Loading test dataset for corresponding model...")
@@ -95,7 +95,7 @@ def load_test_experiment(architecture: str, data: str, data_root: Path, include_
         normalize
     ])
 
-    dataset = SurgicalDataset(root=data_root, transform=transforms, mode="test", recurrency_size=recurrency_size)
+    dataset = SurgicalDataset(root=data_root, transform=transforms, recurrency_size=recurrency_size)
 
     print("The length of the testing dataset is: ", len(dataset))
 
@@ -185,13 +185,15 @@ def main():
         include_state = False
 
     occ_param = none_or_str(args.occlude_param)
-    num_experiments = 5
+    num_experiments = 1
 
     print("Loading data from {}".format(args.data_root))
     list_of_results = [run_test_experiment(args.architecture, data=args.dataset, data_root=args.data_root, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, occ_param=occ_param) for _ in range(num_experiments)]
     
     results = get_metrics(list_of_results)
 
+    print(results)
+    
     if args.save:
         save_results(args, results, include_state, occ_param=occ_param)
 

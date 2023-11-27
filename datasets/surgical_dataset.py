@@ -93,7 +93,7 @@ class SurgicalDataset(Dataset):
         labels = sample['label']
 
         if self.transform is not None:
-            imgs, depths, labels, forces = self.transform(imgs, depths, labels, forces, sample["dataset"])
+            imgs, _, labels, _ = self.transform(imgs, None, labels, None, None)
     
 
         return {'img': imgs[0] if self.recurrency_size==1 else imgs, 'robot_state': labels}
