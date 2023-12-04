@@ -16,21 +16,20 @@ parser = argparse.ArgumentParser(description="Script to test the different model
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument("data_root", type=str, help="The root directory of the data")
-parser.add_argument("--dataset", choices=["dvrk", "dafoes", "mixed"])
+parser.add_argument("--dataset", choices=["chua", "img2force", "mixed"])
 parser.add_argument("--architecture", choices=['cnn', 'vit', 'fc'], default='vit', help='The chosen architecture to test')
 parser.add_argument("--type", type=str, default="vs", choices=["v", "vs"], help='Include the state')
 parser.add_argument("--train-type", type=str, default='random', help='The training type of the chosen model')
 parser.add_argument("--save-dir", default='results', type=str, help='Save directory for the metrics and predictions')
 parser.add_argument('--occlude-param', choices=["force_sensor", "robot_p", "robot_o", "robot_v", "robot_w", "robot_q", "robot_vq", "robot_tq", "robot_qd", "robot_tqd", "None"], help="choose the parameters to occlude")
 parser.add_argument("--save", action='store_true', help='Save metrics and predictions for further analysis')
-parser.add_argument("--recurrency", action='store_true')
+parser.add_argument("--recurrency", action='store_true', help="add recurrency to the model")
 
 
 def load_test_experiment(architecture: str, data: str, data_root: Path, include_state: bool = True, recurrency: bool = False,  train_mode: str = "random", occ_param: str = None):
     train_modes = ["random", "color", "geometry", "structure", "stiffness", "position"]
     assert architecture.lower() in ["vit", "cnn", "fc"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
     assert train_mode in train_modes, "'{}' is not an available training mode. The available training mode are: {}".format(train_mode, train_modes)
-    assert data in ["dafoes", "dvrk", "mixed"], "The available datasets for this case are: 'dafoes', 'dvrk' or 'mixed'."
     
     if include_state:
         state_size = 54 
@@ -49,7 +48,7 @@ def load_test_experiment(architecture: str, data: str, data_root: Path, include_
 
     # Find the corresponding checkpoint
     print("LOADING EXPERIMENT [==>  ]")
-    root = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     checkpoints_root = Path("{}/checkpoints/{}".format(root, data))
     
     if architecture.lower() == 'fc':
@@ -63,12 +62,12 @@ def load_test_experiment(architecture: str, data: str, data_root: Path, include_
         else:
             checkpoints = checkpoints_root/"rgb/{}/{}/{}_{}".format("r"+architecture if recurrency else architecture, occ_param, "visu_state" if include_state else "visu", train_mode)
     
-    # print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
-    # checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
+    print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
+    checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
     print("LOADING EXPERIMENT [===> ]")
     print("Loading weights...")
-    # checkpoint = torch.load(checkpoint_dir)
-    # model.load_state_dict(checkpoint['state_dict'], strict=False)
+    checkpoint = torch.load(checkpoint_dir)
+    model.load_state_dict(checkpoint['state_dict'], strict=False)
 
     print("LOADING EXPERIMENT [====>]")
     print("Loading test dataset for corresponding model...")
