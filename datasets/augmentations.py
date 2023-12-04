@@ -3,7 +3,7 @@ import torch
 import random
 import numpy as np
 from PIL import Image
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Union
 import torch.nn.functional as F
 from datasets.utils import get_reflection, transform_state, get_reflection_dvrk, transform_state_dvrk
 import cv2
@@ -33,6 +33,14 @@ class Normalize(object):
             t.sub_(m).div_(s)
         return images, depths, states, forces
 
+class UnNormalize(object):
+    def __init__(self, mean, std) -> None:
+        self.mean = mean
+        self.std = std
+    def __call__(self, images: List[torch.Tensor]) -> Union[List[torch.Tensor], torch.Tensor]:
+        for t, m , s in zip(images, self.mean, self.std):
+            t.mul_(s).add_(m)
+        return images
 
 class ArrayToTensor(object):
     """Converts a list of numpy.ndarray (H x W x C) along with a intrinsics matrix to a list of torch.FloatTensor of shape (C x H x W) with a intrinsics tensor."""

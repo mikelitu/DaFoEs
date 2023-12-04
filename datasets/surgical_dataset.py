@@ -9,6 +9,9 @@ from path import Path
 import cv2
 from PIL import ImageFile
 from datasets.surgical_video_processing import crop_right_tool
+from datasets.utils import load_metrics
+from datasets.augmentations import Compose, ArrayToTensor, Normalize, UnNormalize, SquareResize, CentreCrop
+import matplotlib.pyplot as plt
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -34,12 +37,14 @@ def generate_random_kinematics(mu: float, sigma: float):
     | 48 to 54 -> Desired joint torque (tq1d, tq2d, tq3d, tq4d, tq5d, tq6d, tq7d)
     | 55 to 57 -> Estimated end effector force (psm_fx, psm_fy, psm
     """
+
     kinematic_chain = np.random.normal(mu, sigma, 54)
     return kinematic_chain / np.linalg.norm(kinematic_chain)
 
 def load_as_float(path: Path) -> np.ndarray:
     img = imageio.imread(path)[:,:, :3].astype(np.float32)
     return crop_right_tool(img)
+
 
 
 class SurgicalDataset(Dataset):
@@ -63,6 +68,7 @@ class SurgicalDataset(Dataset):
 
         self.transform = transform
         self.recurrency_size = recurrency_size
+        self.mean, self.std, _, _ = load_metrics("dvrk")
         self._generate_samples()
 
     def _open_video(self, video) -> cv2.VideoCapture:
@@ -80,7 +86,7 @@ class SurgicalDataset(Dataset):
         for i in range(len(files) - self.recurrency_size):
             sample = {}
             sample['img'] = files[i:i+self.recurrency_size]
-            sample['label'] = np.array([generate_random_kinematics(0, 1) for _ in range(self.recurrency_size)])
+            sample['label'] = np.array([generate_random_kinematics(self.mean, self.std) for _ in range(self.recurrency_size)])
             samples.append(sample)
         
         self.samples = samples
@@ -100,4 +106,3 @@ class SurgicalDataset(Dataset):
     
     def __len__(self):
         return len(self.samples)
-

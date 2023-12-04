@@ -8,7 +8,7 @@ def crop_right_tool(frame: np.ndarray) -> np.ndarray:
     """
     width = frame.shape[1]
 
-    return frame[:, width//2:, :]
+    return frame[:, :width//2 + 250, :]
 
 def crop_frame(frame: np.ndarray, crop_size: int = 256, center: bool = True):
     """
