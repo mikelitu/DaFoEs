@@ -2,7 +2,7 @@
 
 Implementation of the models presented in the paper "DaFoEs: Mixing Datasets Towards the generalization of vision-state deep-learning Force Estimation in Minimally Invasive Robotic Surgery" to appear on RA-L 2024.
 
-xfun::embed_file("imgs/Experimental_setup.pdf")
+<embed src="imgs/Experimental_setup.pdf" width="1920" height="1080" type="application/pdf" >
 
 ## Setup the environment
 
