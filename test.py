@@ -22,7 +22,6 @@ parser.add_argument("--save-dir", default='results', type=str, help='Save direct
 parser.add_argument('--occlude-param', choices=["force_sensor", "robot_p", "robot_o", "robot_v", "robot_w", "robot_q", "robot_vq", "robot_tq", "robot_qd", "robot_tqd", "None"], help="choose the parameters to occlude")
 parser.add_argument("--save", action='store_true', help='Save metrics and predictions for further analysis')
 parser.add_argument("--recurrency", action='store_true')
-parser.add_argument("--include-depth", action='store_true')
 parser.add_argument("--att-type", default=None, help="Additional attention values")
 
 

@@ -38,6 +38,21 @@ The main model constructor can be found on [*models/force_estimator.py*](models/
 
 The scripts are adapted for the use on our two available dataset, however it can be adapted to any custom dataset of your preference. The [*train.py*](train.py) file contains an example for a simple training loop on how to train the force estimation model.
 
+```python3
+python3 train.py --dataset <your-dataset-name> --architecture <desire-decoder> --recurrency
+```
+
+To include your custom dataset update the content on [*datasets/vision_state_dataset.py*](datasets/vision_state_dataset.py).
+
+
+## Testing
+
+To test the model use the following command:
+
+```python3
+python3 test.py --dataset <your-dataset-name> --architecture <trained_architecture> 
+```
+
 ## License and copyright
 
 Please see the [LICENSE](LICENSE) file for details.
