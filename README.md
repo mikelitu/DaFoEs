@@ -1,22 +1,24 @@
 # DaFoEs
 
-Implementation of the models presented in the paper "DaFoEs: Mixing Datasets Towards the generalization of vision-state deep-learning Force Estimation in Minimally Invasive Robotic Surgery" to appear on RA-L 2024.
+Implementation of the models presented in the paper "DaFoEs: Mixing <u>Da</u>tasets Towards the generalization of vision-state deep-learning <u>Fo</u>rce <u>Es</u>timation in Minimally Invasive Robotic Surgery" to appear on RA-L 2024.
 
-<embed src="imgs/Experimental_setup.pdf" width="1920" height="1080" type="application/pdf" >
+![imgs](imgs/Experimental_setup-1.png)
 
-## Setup the environment
+*Experimental setup for the collection of our custom vision and force dataset (DaFoEs) for the training on the different models presented on this paper.*
 
-The following code has been tested with *Python3.11*. Setup the *conda* environment to run the code.
-
-```shell
-conda create -n dafoes python=3.11
-conda activate dafoes
-pip3 install -r requirements.txt
-```
+><font size = 4>[**DaFoEs: Mixing <u>Da</u>tasets Towards the generalization of vision-state deep-learning <u>Fo</u>rce <u>Es</u>timation in Minimally Invasive Robotic Surgery**]()</font>,
+>
+>[Mikel De Iturrate Reyzabal](https://kclpure.kcl.ac.uk/portal/en/persons/mikel-de-iturrate-reyzabal(54d8acc4-29b6-4ea6-855c-3d25077e13f4).html), Mingcong Chen, Wei Huang, , [Sebastien Ourselin](https://www.kcl.ac.uk/people/sebastien-ourselin), [Hongbin Liu](http://kclhammerlab.com/people/hongbin-liu/)
+>
+>*RA-L 2024 ([link coming soon]())*
 
 ## Models
 
-The [*models*](models) folder contain multiple scripts to build the different models presented on our paper. The list of models and the different combinations for the encoder and decoder can be found on the table below:
+The [*models*](models) folder contain multiple scripts to build the different models presented on our paper.
+
+![Graphical representation of the different models presented on the paper](imgs/Models.png)
+
+The list of models and the different combinations for the encoder and decoder can be found on the table below:
 
 |       **Decoder**       |     **Encoder**    | **Network name** |
 |:-----------------------:|:------------------:|:----------------:|
@@ -35,6 +37,15 @@ The main model constructor can be found on [*models/force_estimator.py*](models/
 * **att_type**: Add some attention blocks to the CNN encoder
 * **state_size**: The size for the state vector
 
+## Setup the environment
+
+The following code has been tested with *Python3.11*. Setup the *conda* environment to run the code.
+
+```shell
+conda create -n dafoes python=3.11
+conda activate dafoes
+pip3 install -r requirements.txt
+```
 
 ## Training
 
@@ -54,6 +65,13 @@ To test the model use the following command:
 ```python3
 python3 test.py --dataset <your-dataset-name> --architecture <trained_architecture> 
 ```
+
+## Results
+
+Our reduced temporal sampling and the use of a vision transformer based decoder showed better performance on predicting the temporal evolution of the forces.
+
+![Temporal evolution of the forces for the different architectures analysed on the paper](imgs/force_evolution-1.png)
+
 
 ## License and copyright
 
