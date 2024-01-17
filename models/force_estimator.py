@@ -9,7 +9,7 @@ from einops import repeat
 class ForceEstimator(nn.Module):
 
     def __init__(self, architecture: str, recurrency: bool, pretrained: bool,
-                 include_depth: bool = False, att_type: str = None, embed_dim: int = 512,
+                 att_type: str = None, embed_dim: int = 512,
                  state_size: int = 0) -> None:
         super(ForceEstimator, self).__init__()
 
@@ -22,7 +22,6 @@ class ForceEstimator(nn.Module):
             if self.architecture == "cnn":
                 encoder = ResnetEncoder(num_layers=50,
                                             pretrained=pretrained,
-                                            include_depth=include_depth,
                                             att_type=att_type)
                 
                 self.encoder = nn.Sequential(
@@ -57,7 +56,7 @@ class ForceEstimator(nn.Module):
                                 mlp_dim=2048,
                                 dropout=0.1,
                                 emb_dropout=0.1,
-                                channels=4 if include_depth else 3,
+                                channels=3,
                                 )
                 
                 self.cls_token = nn.Parameter(torch.randn(1, 1, 1024))

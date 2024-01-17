@@ -21,8 +21,7 @@ def none_or_str(value):
 
 def create_saving_dir(root: Path, 
                       experiment_name: str, 
-                      architecture: str, 
-                      include_depth: bool, 
+                      architecture: str,
                       dataset: str, 
                       recurrency: bool, 
                       att_type: str = None, 
@@ -43,8 +42,8 @@ def create_saving_dir(root: Path,
             save_path = root/"{}".format(dataset)/architecture/experiment_name/timestamp
     else:
         if occ_param is not None:
-            save_path = root/"{}/{}".format(dataset, "rgbd" if include_depth else "rgb")/architecture/occ_param/experiment_name/timestamp
+            save_path = root/"{}".format(dataset)/architecture/occ_param/experiment_name/timestamp
         else:
-            save_path = root/"{}/{}".format(dataset, "rgbd" if include_depth else "rgb")/architecture/experiment_name/timestamp
+            save_path = root/"{}".format(dataset)/architecture/experiment_name/timestamp
     
     return save_path

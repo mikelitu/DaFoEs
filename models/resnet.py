@@ -39,7 +39,7 @@ class ResNetMultiImageInput(models.ResNet):
                 nn.init.constant_(m.bias, 0)
 
 def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1,
-                            include_depth=True, att_type=None):
+                            att_type=None):
     """Constructs a ResNet model.
 
     Args:
@@ -51,7 +51,7 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1,
     blocks = {18: [2, 2, 2, 2], 50: [3, 4, 6, 3]}[num_layers]
     block_type = {18: models.resnet.BasicBlock, 50: models.resnet.Bottleneck}[num_layers]
     model = ResNetMultiImageInput(block_type, blocks, num_input_images=num_input_images, 
-                                  input_channel=4 if include_depth else 3, att_type=att_type)
+                                  input_channel=3, att_type=att_type)
 
     if pretrained:
         loaded = model_zoo.load_url(models.resnet.model_urls['resnet{}'.format(num_layers)])
@@ -64,7 +64,7 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1,
 class ResnetEncoder(nn.Module):
     """Pytorch module for a resnet encoder
     """
-    def __init__(self, num_layers, pretrained, num_input_images=1, include_depth=True, att_type=None):
+    def __init__(self, num_layers, pretrained, num_input_images=1, att_type=None):
         super(ResnetEncoder, self).__init__()
 
         self.att_type = att_type
@@ -84,8 +84,8 @@ class ResnetEncoder(nn.Module):
         if num_layers not in resnets:
             raise ValueError("{} is not a valid number of resnet layers".format(num_layers))
         
-        if include_depth or att_type is not None:
-            self.encoder = resnet_multiimage_input(num_layers, pretrained, num_input_images, include_depth, att_type)
+        if att_type is not None:
+            self.encoder = resnet_multiimage_input(num_layers, pretrained, num_input_images, att_type)
         else:
             self.encoder = resnets[num_layers](pretrained)
         

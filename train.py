@@ -18,9 +18,9 @@ import os
 parser = argparse.ArgumentParser(description='Vision and robot state based force estimator using different architectures',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--dataset', default='dvrk', choices=['dafoes', 'dvrk', 'mixed'], help='available training dataset')
+parser.add_argument('--dataset', default='mixed', choices=['dafoes', 'dvrk', 'mixed'], help='available training dataset')
 parser.add_argument('--type', default='vs', choices=['v', 'vs'], type=str, help='model type it can be vision only (v) or vision and state (vs)')
-parser.add_argument('--architecture', choices=['cnn', 'vit', 'fc'], type=str, help='')
+parser.add_argument('--architecture', choices=['cnn', 'vit', 'fc'], type=str, help='different architectures for the vision encoder')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('-b', '--batch-size', default=128, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float, metavar='LR', help='initial learning rate')
@@ -38,9 +38,8 @@ parser.add_argument('-r', '--rmse-loss-weight', default=5.0, type=float, help='w
 parser.add_argument('-g', '--gd-loss-weight', default=0.5, type=float, help='weight for gradient difference loss')
 parser.add_argument('--train-type', choices=['random', 'geometry', 'color', 'structure', 'stiffness', "position"], default='random', type=str, help='training type for comparison')
 parser.add_argument('--occlude-param', choices=["force_sensor", "robot_p", "robot_o", "robot_v", "robot_w", "robot_q", "robot_vq", "robot_tq", "robot_qd", "robot_tqd", "None"], help="choose the parameters to occlude")
-parser.add_argument('--include-depth', action='store_true')
 parser.add_argument('--att-type', default=None, help="adding attention layers to the network")
-parser.add_argument('--recurrency', action='store_true')
+parser.add_argument('--recurrency', action='store_true', help="add recurrency to the model")
 
 best_error = -1
 n_iter = 0
@@ -56,7 +55,7 @@ def main():
     save_path = Path(args.name)
     root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     checkpoint_dir = root/'checkpoints'
-    args.save_path = create_saving_dir(checkpoint_dir, save_path, args.architecture, args.include_depth, args.dataset, args.recurrency, args.att_type, occ_param)
+    args.save_path = create_saving_dir(checkpoint_dir, save_path, args.architecture, args.dataset, args.recurrency, args.att_type, occ_param)
     # args.save_path = '/nfs/home/mreyzabal/checkpoints/{}/{}'.format('dvrk' if args.dvrk else 'dafoes', )/save_path/timestamp
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
@@ -122,8 +121,8 @@ def main():
     print("=> Getting scenes from the dataset '{}'".format(args.dataset))
     print("=> Choosing the correct dataset for choice {}...".format(args.train_type))
     
-    train_dataset = VisionStateDataset(mode="train", transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
-    val_dataset = VisionStateDataset(mode="val", transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, load_depths=args.include_depth, occlude_param=occ_param, dataset=args.dataset)
+    train_dataset = VisionStateDataset(mode="train", transform=train_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, occlude_param=occ_param, dataset=args.dataset)
+    val_dataset = VisionStateDataset(mode="val", transform=val_transform, seed=args.seed, train_type=args.train_type, recurrency_size=recurrency_size, occlude_param=occ_param, dataset=args.dataset)
 
     print('{} samples found in {} train scenes'.format(len(train_dataset), len(train_dataset.folder_index) if args.dataset=="dvrk" else len(train_dataset.scenes)))
     print('{} samples found in {} validation scenes'.format(len(val_dataset), len(val_dataset.folder_index) if args.dataset=="dvrk" else len(val_dataset.scenes)))
@@ -146,7 +145,6 @@ def main():
     model = ForceEstimator(architecture=args.architecture,
                            recurrency=args.recurrency,
                            pretrained=False,
-                           include_depth=args.include_depth,
                            att_type=args.att_type,
                            state_size=state_size)
 

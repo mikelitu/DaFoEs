@@ -43,8 +43,7 @@ def setup(architecture, recurrency):
     model = ForceEstimator(architecture=architecture,
                            pretrained=False,
                            state_size=54,
-                           recurrency=recurrency,
-                           include_depth=False)
+                           recurrency=recurrency)
     
     dataset = VisionStateDataset(recurrency_size=5 if recurrency else 1,
                                  transform=transforms,

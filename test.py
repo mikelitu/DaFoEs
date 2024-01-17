@@ -26,7 +26,7 @@ parser.add_argument("--include-depth", action='store_true')
 parser.add_argument("--att-type", default=None, help="Additional attention values")
 
 
-def load_test_experiment(architecture: str, include_depth: bool, data: str, include_state: bool = True, recurrency: bool = False,  train_mode: str = "random", att_type: str = None, occ_param: str = None):
+def load_test_experiment(architecture: str, data: str, include_state: bool = True, recurrency: bool = False,  train_mode: str = "random", att_type: str = None, occ_param: str = None):
     train_modes = ["random", "color", "geometry", "structure", "stiffness", "position"]
     assert architecture.lower() in ["vit", "cnn", "fc"], "The architecture has to be either 'vit' or 'cnn', '{}' is not valid".format(architecture)
     assert train_mode in train_modes, "'{}' is not an available training mode. The available training mode are: {}".format(train_mode, train_modes)
@@ -41,7 +41,6 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
                            state_size=state_size,
                            recurrency=recurrency,
                            pretrained=False,
-                           include_depth=include_depth,
                            att_type=att_type)
 
     if recurrency:
@@ -60,9 +59,9 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
             checkpoints = checkpoints_root/"{}/{}/{}".format(architecture, occ_param, "visu_state_"+train_mode)
     else:
         if occ_param is None:
-            checkpoints = checkpoints_root/"{}/{}/{}_{}".format("rgbd" if include_depth else "rgb", "r"+architecture if recurrency else architecture, "visu_state" if include_state else "visu", train_mode)
+            checkpoints = checkpoints_root/"{}/{}_{}".format("r"+architecture if recurrency else architecture, "visu_state" if include_state else "visu", train_mode)
         else:
-            checkpoints = checkpoints_root/"{}/{}/{}/{}_{}".format("rgbd" if include_depth else "rgb", "r"+architecture if recurrency else architecture, occ_param, "visu_state" if include_state else "visu", train_mode)
+            checkpoints = checkpoints_root/"{}/{}/{}_{}".format("r"+architecture if recurrency else architecture, occ_param, "visu_state" if include_state else "visu", train_mode)
     
     print('The checkpoints are loaded from: {}'.format(sorted(checkpoints.dirs())[-1]))   
     checkpoint_dir = sorted(checkpoints.dirs())[-1]/'checkpoint.pth.tar'
@@ -97,7 +96,7 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     ])
 
     dataset = VisionStateDataset(transform=transforms, mode="test", recurrency_size=recurrency_size,
-                          dataset="mixed", load_depths=include_depth)
+                          dataset="mixed")
 
     print("The length of the testing dataset is: ", len(dataset))
 
@@ -106,14 +105,14 @@ def load_test_experiment(architecture: str, include_depth: bool, data: str, incl
     return model, dataloader
 
 
-def run_test_experiment(architecture: str, include_depth: bool, data: str, recurrency: bool = False, include_state: bool = True, train_mode: str = "random", occ_param: str = None):
+def run_test_experiment(architecture: str, data: str, recurrency: bool = False, include_state: bool = True, train_mode: str = "random", occ_param: str = None):
 
     predictions_dafoes, predictions_dvrk = [], []
     metrics_dafoes, metrics_dvrk = [], []
     forces_dafoes, forces_dvrk = [], []
 
     # Loading the necessary data
-    model, dataloader = load_test_experiment(architecture, include_depth=include_depth, include_state=include_state, train_mode=train_mode, data=data, recurrency=recurrency, occ_param=occ_param)
+    model, dataloader = load_test_experiment(architecture, include_state=include_state, train_mode=train_mode, data=data, recurrency=recurrency, occ_param=occ_param)
     
     device = torch.device("cuda")
     
@@ -156,13 +155,13 @@ def run_test_experiment(architecture: str, include_depth: bool, data: str, recur
 def save_results(args, results, include_state: bool, occ_param: str = None):
     root_dir = Path(os.path.dirname(os.path.abspath(__file__)))
     if occ_param is None:
-        print("The results will be saved at: {}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, "rgbd" if args.include_depth else "rgb"))
-        save_dir = root_dir/args.save_dir/"{}/{}".format(args.dataset, "rgbd" if args.include_depth else "rgb")
+        print("The results will be saved at: {}/{}/{}".format(root_dir, args.save_dir, args.dataset))
+        save_dir = root_dir/args.save_dir/"{}/{}".format(args.dataset)
         save_dir.makedirs_p()
         f = open(save_dir/'{}_{}_{}.pkl'.format("r"+args.architecture.lower() if args.recurrency else args.architecture.lower(), "state" if include_state else "visu", args.train_type), 'wb')
     else:
-        print("The results will be saved at: {}/{}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, "rgbd" if args.include_depth else "rgb", occ_param))
-        save_dir = root_dir/args.save_dir/"{}/{}/{}".format(args.dataset, "rgbd" if args.include_depth else "rgb", occ_param)
+        print("The results will be saved at: {}/{}/{}/{}".format(root_dir, args.save_dir, args.dataset, occ_param))
+        save_dir = root_dir/args.save_dir/"{}/{}".format(args.dataset, occ_param)
         save_dir.makedirs_p()
         f = open(save_dir/'{}_{}_{}.pkl'.format("r"+args.architecture.lower() if args.recurrency else args.architecture.lower(), "state" if include_state else "visu", args.train_type), 'wb')
 
@@ -203,7 +202,7 @@ def main():
     occ_param = none_or_str(args.occlude_param)
     num_experiments = 5
 
-    list_of_results = [run_test_experiment(args.architecture, include_depth=args.include_depth, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset, occ_param=occ_param) for _ in range(num_experiments)]
+    list_of_results = [run_test_experiment(args.architecture, include_state=include_state, train_mode=args.train_type, recurrency=args.recurrency, data=args.dataset, occ_param=occ_param) for _ in range(num_experiments)]
     
     results = get_metrics(list_of_results)
 
