@@ -2,6 +2,8 @@
 
 Implementation of the models presented in the paper "DaFoEs: Mixing Datasets Towards the generalization of vision-state deep-learning Force Estimation in Minimally Invasive Robotic Surgery" to appear on RA-L 2024.
 
+xfun::embed_file(imgs/Experimental_setup.pdf)
+
 ## Setup the environment
 
 The following code has been tested with *Python3.11*. Setup the *conda* environment to run the code.
@@ -66,6 +68,7 @@ Special thanks to Zhonge Chua for sharing their dataset from his article [[1]](#
 If you find this code or this research useful, please consider citing our work:
 
 ```bibtex
+
 ```
 
 ## References
