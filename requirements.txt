@@ -26,7 +26,7 @@ opencv-python==4.8.1.78
 packaging==23.1
 pandas==2.0.3
 path==16.7.1
-Pillow==6.2.2
+Pillow==10.2.0
 prettytable==3.8.0
 progressbar2==4.2.0
 protobuf==4.23.4
