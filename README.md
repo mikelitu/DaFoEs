@@ -10,7 +10,7 @@ Implementation of the models presented in the paper "DaFoEs: Mixing <u>Da</u>tas
 >
 >[Mikel De Iturrate Reyzabal](https://kclpure.kcl.ac.uk/portal/en/persons/mikel-de-iturrate-reyzabal(54d8acc4-29b6-4ea6-855c-3d25077e13f4).html), Mingcong Chen, Wei Huang, , [Sebastien Ourselin](https://www.kcl.ac.uk/people/sebastien-ourselin), [Hongbin Liu](http://kclhammerlab.com/people/hongbin-liu/)
 >
->*RA-L 2024 ([link coming soon]())*
+>*RA-L 2024 ([link](https://ieeexplore.ieee.org/abstract/document/10410871))*
 
 ## Models
 
@@ -86,7 +86,16 @@ Special thanks to Zhonge Chua for sharing their dataset from his article [[1]](#
 If you find this code or this research useful, please consider citing our work:
 
 ```bibtex
-
+@ARTICLE{10410871,
+  author={Reyzabal, Mikel De Iturrate and Chen, Mingcong and Huang, Wei and Ourselin, Sebastien and Liu, Hongbin},
+  journal={IEEE Robotics and Automation Letters}, 
+  title={DaFoEs: Mixing Datasets Towards the Generalization of Vision-State Deep-Learning Force Estimation in Minimally Invasive Robotic Surgery}, 
+  year={2024},
+  volume={9},
+  number={3},
+  pages={2527-2534},
+  keywords={Robots;Force;Training;Estimation;Phantoms;Task analysis;Sensors;Deep learning in grasping and manipulation;surgical robotics: Laparoscopy;computer vision for medical robotics},
+  doi={10.1109/LRA.2024.3356984}}
 ```
 
 ## References
